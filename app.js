@@ -129,6 +129,10 @@
     toastStack: document.getElementById("toast-stack")
   };
 
+  if (elements.pmInboxPopover && elements.pmInboxPopover.parentElement !== document.body) {
+    document.body.appendChild(elements.pmInboxPopover);
+  }
+
   function parseStoredJson(key, fallback) {
     try {
       const value = localStorage.getItem(key);
