@@ -763,16 +763,28 @@
       return entry.counterpartUsername;
     }
 
+    if (entry.username) {
+      return entry.username;
+    }
+
     if (entry.direction === "incoming") {
-      return entry.fromUsername || "";
+      return entry.fromUsername || entry.from || "";
     }
 
     if (entry.direction === "outgoing" && entry.toUsername) {
       return entry.toUsername;
     }
 
+    if (entry.toUsername) {
+      return entry.toUsername;
+    }
+
+    if (entry.fromUsername) {
+      return entry.fromUsername;
+    }
+
     const match = String(entry.from || "").match(/^\(to ([^)]+)\)$/);
-    return match ? match[1] : "";
+    return match ? match[1] : (entry.counterpartLabel || "");
   }
 
   function getConversationLabel(entry) {
@@ -822,7 +834,26 @@
       }
     });
 
-    return Array.from(map.values()).sort(function (left, right) {
+    const conversations = Array.from(map.values());
+    if (!conversations.length) {
+      Object.keys(state.pmUnread).forEach(function (username) {
+        if (!username || map.has(username)) {
+          return;
+        }
+
+        conversations.push({
+          username,
+          label: username,
+          message: "New private message",
+          preferences: {},
+          timestamp: "",
+          time: "",
+          unread: Number(state.pmUnread[username] || 0)
+        });
+      });
+    }
+
+    return conversations.sort(function (left, right) {
       return new Date(right.timestamp || 0).getTime() - new Date(left.timestamp || 0).getTime();
     });
   }
@@ -1246,12 +1277,15 @@
 
   function openPmInbox() {
     state.pmInboxOpen = !state.pmInboxOpen;
+    renderPmInbox();
     elements.pmInboxPopover.classList.toggle("hidden", !state.pmInboxOpen);
+    elements.openInboxBtn.setAttribute("aria-expanded", state.pmInboxOpen ? "true" : "false");
   }
 
   function closePmInbox() {
     state.pmInboxOpen = false;
     elements.pmInboxPopover.classList.add("hidden");
+    elements.openInboxBtn.setAttribute("aria-expanded", "false");
   }
 
   function openPmConversation(userLike) {
