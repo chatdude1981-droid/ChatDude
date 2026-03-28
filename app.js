@@ -24,6 +24,7 @@
     activeTab: "guest",
     typingTimer: null,
     isTyping: false,
+    accountMenuOpen: false,
     mediaPublishers: [],
     localStream: null,
     isPublishing: false,
@@ -494,6 +495,10 @@
     elements.presenceStatusSelect.disabled = !state.socket;
     renderPmInbox();
     renderPmWindow();
+    elements.accountBadge.setAttribute("aria-expanded", state.accountMenuOpen ? "true" : "false");
+    if (state.accountMenuOpen) {
+      positionAccountMenu();
+    }
   }
 
   function canManageActiveRoom() {
@@ -1472,6 +1477,7 @@
     if (!state.me) {
       return;
     }
+    state.accountMenuOpen = true;
     if (elements.accountMenu.parentElement !== document.body) {
       document.body.appendChild(elements.accountMenu);
     }
@@ -1487,6 +1493,7 @@
   }
 
   function closeAccountMenu() {
+    state.accountMenuOpen = false;
     elements.accountMenu.classList.add("hidden");
     elements.accountMenu.hidden = true;
     elements.accountMenu.style.display = "";
@@ -1502,7 +1509,7 @@
       event.stopPropagation();
     }
 
-    if (elements.accountMenu.classList.contains("hidden") || elements.accountMenu.hidden) {
+    if (!state.accountMenuOpen) {
       openAccountMenu();
     } else {
       closeAccountMenu();
@@ -2953,7 +2960,7 @@
       state.pmWindowSize = clampPmWindowSize(state.pmWindowSize);
       state.pmWindowPosition = clampPmWindowPosition(state.pmWindowPosition, state.pmWindowSize);
       renderPmWindow();
-      if (!elements.accountMenu.classList.contains("hidden")) {
+      if (state.accountMenuOpen) {
         positionAccountMenu();
       }
     });
@@ -3022,7 +3029,7 @@
     });
     elements.roomForm.addEventListener("submit", handleCreateRoom);
 
-    elements.accountBadge.addEventListener("click", toggleAccountMenu);
+    elements.accountBadge.addEventListener("pointerdown", toggleAccountMenu);
     elements.accountBadge.addEventListener("keydown", function (event) {
       if (event.key === "Enter" || event.key === " ") {
         toggleAccountMenu(event);
