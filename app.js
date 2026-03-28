@@ -685,6 +685,14 @@
     visibleMessages.forEach(function (message) {
       const item = document.createElement("li");
       item.className = `message-item ${message.kind}`;
+      const isOwnMessage = Boolean(
+        state.me &&
+        message.kind !== "system" &&
+        (
+          (message.senderId && message.senderId === state.me.id) ||
+          (message.username && state.me.username && message.username === state.me.username)
+        )
+      );
 
       if (message.kind === "system") {
         const body = document.createElement("div");
@@ -739,23 +747,33 @@
         meta.appendChild(time);
 
         const body = document.createElement("div");
-        body.className = "message-bubble";
-        body.appendChild(meta);
-
-        const textRow = document.createElement("div");
-        textRow.className = "message-text-row";
+        body.className = `message-bubble${isOwnMessage ? " is-own-inline" : ""}`;
 
         const text = document.createElement("div");
         text.className = "message-text";
         text.textContent = message.message;
         text.style.cssText = styleFromPreferences(message.preferences);
-        textRow.appendChild(text);
 
         const bubbleTime = document.createElement("span");
         bubbleTime.className = "time-label bubble-time";
         bubbleTime.textContent = formatTime(message);
-        textRow.appendChild(bubbleTime);
-        body.appendChild(textRow);
+
+        if (isOwnMessage) {
+          const inlineRow = document.createElement("div");
+          inlineRow.className = "message-inline-row";
+          inlineRow.appendChild(meta);
+          inlineRow.appendChild(text);
+          inlineRow.appendChild(bubbleTime);
+          body.appendChild(inlineRow);
+        } else {
+          body.appendChild(meta);
+
+          const textRow = document.createElement("div");
+          textRow.className = "message-text-row";
+          textRow.appendChild(text);
+          textRow.appendChild(bubbleTime);
+          body.appendChild(textRow);
+        }
 
         if (canDeleteMessage(message)) {
           const actions = document.createElement("div");

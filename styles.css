@@ -849,6 +849,13 @@ button:active {
   gap: 10px;
 }
 
+.message-inline-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
 .message-actions {
   display: flex;
   justify-content: flex-end;
@@ -882,6 +889,19 @@ button:active {
   align-self: flex-end;
   white-space: nowrap;
   opacity: 0.85;
+}
+
+.message-bubble.is-own-inline .message-meta {
+  flex: 0 0 auto;
+  min-width: fit-content;
+}
+
+.message-bubble.is-own-inline .message-text {
+  flex: 1;
+}
+
+.message-bubble.is-own-inline .bubble-time {
+  margin-left: auto;
 }
 
 .message-role,
