@@ -88,8 +88,6 @@
     logoutBtn: document.getElementById("logout-btn"),
     guestUpgradeCard: document.getElementById("guest-upgrade-card"),
     roomList: document.getElementById("room-list"),
-    roomTitle: document.getElementById("room-title"),
-    roomDescription: document.getElementById("room-description"),
     callParticipants: document.getElementById("call-participants"),
     roomPickerOverlay: document.getElementById("room-picker-overlay"),
     roomPickerList: document.getElementById("room-picker-list"),
@@ -137,6 +135,9 @@
 
   if (elements.pmInboxPopover && elements.pmInboxPopover.parentElement !== document.body) {
     document.body.appendChild(elements.pmInboxPopover);
+  }
+  if (elements.accountMenu && elements.accountMenu.parentElement !== document.body) {
+    document.body.appendChild(elements.accountMenu);
   }
 
   function parseStoredJson(key, fallback) {
@@ -418,12 +419,12 @@
   function renderAccount() {
     if (!state.me) return;
 
-    const roleLabel = state.me.isGuest
-      ? '<span>Guest account</span>'
-      : verifiedBadgeMarkup();
+    const roleLabel = state.me.isGuest ? "" : verifiedBadgeMarkup();
     elements.accountBadge.innerHTML = `
-      <strong>${escapeHtml(state.me.displayName || state.me.username)}</strong>
-      ${roleLabel}
+      <span class="account-badge-row">
+        <strong>${escapeHtml(state.me.displayName || state.me.username)}</strong>
+        ${roleLabel}
+      </span>
     `;
     elements.accountMenuTitle.textContent = state.me.displayName || state.me.username;
 
@@ -488,8 +489,6 @@
     const activeRoom = roomBySlug(state.activeRoom) || state.rooms[0];
     if (activeRoom) {
       elements.activeRoomPill.textContent = `${activeRoom.name} room`;
-      elements.roomTitle.textContent = activeRoom.name;
-      elements.roomDescription.textContent = activeRoom.description;
     }
 
     elements.deleteRoomBtn.classList.toggle("hidden", !canManageActiveRoom());
@@ -797,11 +796,6 @@
 
         meta.appendChild(left);
 
-        const time = document.createElement("span");
-        time.className = "time-label";
-        time.textContent = formatTime(message);
-        meta.appendChild(time);
-
         const body = document.createElement("div");
         body.className = `message-bubble${isOwnMessage ? " is-own-inline" : ""}`;
 
@@ -822,6 +816,10 @@
           inlineRow.appendChild(bubbleTime);
           body.appendChild(inlineRow);
         } else {
+          const time = document.createElement("span");
+          time.className = "time-label";
+          time.textContent = formatTime(message);
+          meta.appendChild(time);
           body.appendChild(meta);
 
           const textRow = document.createElement("div");
@@ -1421,6 +1419,7 @@
       return;
     }
     applyPreferences();
+    positionAccountMenu();
     elements.accountMenu.classList.remove("hidden");
     elements.accountBadge.setAttribute("aria-expanded", "true");
   }
@@ -2809,6 +2808,9 @@
       if (state.pmInboxOpen) {
         positionPmInbox();
       }
+      if (!elements.accountMenu.classList.contains("hidden")) {
+        positionAccountMenu();
+      }
     });
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") {
@@ -2908,3 +2910,14 @@
   bindEvents();
   bootstrap();
 })();
+  function positionAccountMenu() {
+    const buttonRect = elements.accountBadge.getBoundingClientRect();
+    const panelWidth = Math.min(360, window.innerWidth - 24);
+    const left = Math.min(
+      Math.max(12, buttonRect.right - panelWidth),
+      Math.max(12, window.innerWidth - panelWidth - 12)
+    );
+    const top = Math.min(buttonRect.bottom + 10, Math.max(72, window.innerHeight - 180));
+    elements.accountMenu.style.left = `${left}px`;
+    elements.accountMenu.style.top = `${top}px`;
+  }

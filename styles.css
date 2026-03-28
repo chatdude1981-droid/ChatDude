@@ -152,6 +152,10 @@ body.has-split-call .page-shell {
   margin: 0 auto 0 10px;
 }
 
+body.has-split-call .chat-shell {
+  width: calc(50vw - 18px);
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -223,7 +227,6 @@ body.has-split-call .page-shell {
 .panel-heading p,
 .feature-note span,
 .upgrade-card span,
-.account-badge span,
 .pm-meta,
 .time-label,
 .empty-copy {
@@ -312,12 +315,21 @@ body.has-split-call .page-shell {
   margin-top: 0;
   text-align: left;
   cursor: pointer;
+  color: var(--text);
+}
+
+.account-badge-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-badge strong {
+  color: var(--text);
 }
 
 .account-menu {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  position: fixed;
   width: min(360px, calc(100vw - 24px));
   max-height: min(80vh, 760px);
   overflow: auto;
