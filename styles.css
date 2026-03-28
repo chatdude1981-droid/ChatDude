@@ -731,9 +731,9 @@ button:active {
 .call-card video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
-  background: #020617;
+  background: #000;
   padding-top: 26px;
 }
 
@@ -765,6 +765,10 @@ button:active {
   box-shadow: none;
   z-index: 3;
   cursor: nwse-resize;
+  touch-action: none;
+}
+
+.call-card {
   touch-action: none;
 }
 

@@ -57,7 +57,9 @@
   const CALL_CARD_WIDTH = 196;
   const CALL_CARD_HEIGHT = 146;
   const CALL_CARD_MIN_WIDTH = 160;
-  const CALL_CARD_MIN_HEIGHT = 120;
+  const CALL_CARD_ASPECT_RATIO = CALL_CARD_WIDTH / CALL_CARD_HEIGHT;
+  const CALL_CARD_MIN_HEIGHT = Math.round(CALL_CARD_MIN_WIDTH / CALL_CARD_ASPECT_RATIO);
+  const CALL_EDGE_RESIZE_THRESHOLD = 10;
 
   const elements = {
     authShell: document.getElementById("auth-shell"),
@@ -407,9 +409,22 @@
     };
   }
 
+  function normalizeCallSize(width) {
+    const maxWidth = Math.max(CALL_CARD_MIN_WIDTH, window.innerWidth - 24);
+    const normalizedWidth = Math.max(CALL_CARD_MIN_WIDTH, Math.min(width || CALL_CARD_WIDTH, maxWidth));
+    return {
+      width: normalizedWidth,
+      height: Math.max(CALL_CARD_MIN_HEIGHT, Math.round(normalizedWidth / CALL_CARD_ASPECT_RATIO))
+    };
+  }
+
   function clampCallLayout(layout) {
-    const width = Math.max(CALL_CARD_MIN_WIDTH, Math.min(layout.width || CALL_CARD_WIDTH, window.innerWidth - 24));
-    const height = Math.max(CALL_CARD_MIN_HEIGHT, Math.min(layout.height || CALL_CARD_HEIGHT, window.innerHeight - 84));
+    const size = normalizeCallSize(layout.width || CALL_CARD_WIDTH);
+    const maxHeight = Math.max(CALL_CARD_MIN_HEIGHT, window.innerHeight - 84);
+    const width = size.height > maxHeight
+      ? Math.round(maxHeight * CALL_CARD_ASPECT_RATIO)
+      : size.width;
+    const height = Math.min(maxHeight, Math.round(width / CALL_CARD_ASPECT_RATIO));
     const maxX = Math.max(0, window.innerWidth - width - 18);
     const maxY = Math.max(0, window.innerHeight - height - 18);
 
@@ -2108,31 +2123,40 @@
       return;
     }
 
-    const card = elements.callParticipants.querySelector(`[data-call-socket-id="${socketId}"]`);
-    const requestFullscreen = card && (
-      card.requestFullscreen ||
-      card.webkitRequestFullscreen ||
-      card.msRequestFullscreen
-    );
-
-    if (document.fullscreenElement && card && document.fullscreenElement === card) {
-      document.exitFullscreen?.().catch(function () {
-        state.maximizedCallId = state.maximizedCallId === socketId ? "" : socketId;
-        renderCallPanel();
-      });
-      return;
-    }
-
-    if (card && requestFullscreen) {
-      Promise.resolve(requestFullscreen.call(card)).catch(function () {
-        state.maximizedCallId = state.maximizedCallId === socketId ? "" : socketId;
-        renderCallPanel();
-      });
-      return;
-    }
-
     state.maximizedCallId = state.maximizedCallId === socketId ? "" : socketId;
     renderCallPanel();
+  }
+
+  function getCallResizeEdges(card, event) {
+    const rect = card.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    return {
+      left: x <= CALL_EDGE_RESIZE_THRESHOLD,
+      right: x >= rect.width - CALL_EDGE_RESIZE_THRESHOLD,
+      top: y <= CALL_EDGE_RESIZE_THRESHOLD,
+      bottom: y >= rect.height - CALL_EDGE_RESIZE_THRESHOLD
+    };
+  }
+
+  function hasResizeEdge(edges) {
+    return edges.left || edges.right || edges.top || edges.bottom;
+  }
+
+  function cursorForResizeEdges(edges) {
+    if ((edges.left && edges.top) || (edges.right && edges.bottom)) {
+      return "nwse-resize";
+    }
+    if ((edges.right && edges.top) || (edges.left && edges.bottom)) {
+      return "nesw-resize";
+    }
+    if (edges.left || edges.right) {
+      return "ew-resize";
+    }
+    if (edges.top || edges.bottom) {
+      return "ns-resize";
+    }
+    return "";
   }
 
   async function toggleBlockedUser() {
@@ -2206,8 +2230,18 @@
   function handleCallPointerDown(event) {
     const resizeHandle = event.target.closest("[data-call-resize-handle='true']");
     const handle = event.target.closest("[data-call-drag-handle='true']");
-    const card = (resizeHandle || handle) ? (resizeHandle || handle).closest("[data-call-socket-id]") : null;
+    const card = event.target.closest("[data-call-socket-id]");
     if (!card) {
+      return;
+    }
+
+    if (!resizeHandle && !handle && event.target.closest("button, input")) {
+      return;
+    }
+
+    const resizeEdges = resizeHandle ? { right: true, bottom: true, left: false, top: false } : getCallResizeEdges(card, event);
+    const resizeMode = resizeHandle || (!handle && hasResizeEdge(resizeEdges));
+    if (!resizeMode && !handle) {
       return;
     }
 
@@ -2220,7 +2254,8 @@
     };
     state.draggingCall = {
       socketId,
-      mode: resizeHandle ? "resize" : "move",
+      mode: resizeMode ? "resize" : "move",
+      resizeEdges,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -2237,16 +2272,40 @@
 
   function handleCallPointerMove(event) {
     if (!state.draggingCall || state.draggingCall.pointerId !== event.pointerId) {
+      const card = event.target.closest ? event.target.closest("[data-call-socket-id]") : null;
+      if (!card || event.target.closest("button, input")) {
+        return;
+      }
+      const handle = event.target.closest("[data-call-drag-handle='true']");
+      if (handle) {
+        card.style.cursor = "grab";
+        return;
+      }
+      const edges = getCallResizeEdges(card, event);
+      card.style.cursor = hasResizeEdge(edges) ? cursorForResizeEdges(edges) : "";
       return;
     }
 
     const nextLayout = state.draggingCall.mode === "resize"
-      ? clampCallLayout({
-          x: state.draggingCall.originX,
-          y: state.draggingCall.originY,
-          width: state.draggingCall.originWidth + (event.clientX - state.draggingCall.startX),
-          height: state.draggingCall.originHeight + (event.clientY - state.draggingCall.startY)
-        })
+      ? (function () {
+          const horizontalDelta = state.draggingCall.resizeEdges.left
+            ? (state.draggingCall.startX - event.clientX)
+            : (event.clientX - state.draggingCall.startX);
+          const requestedWidth = state.draggingCall.originWidth + horizontalDelta;
+          const size = normalizeCallSize(requestedWidth);
+          const nextX = state.draggingCall.resizeEdges.left
+            ? state.draggingCall.originX + (state.draggingCall.originWidth - size.width)
+            : state.draggingCall.originX;
+          const nextY = state.draggingCall.resizeEdges.top
+            ? state.draggingCall.originY + (state.draggingCall.originHeight - size.height)
+            : state.draggingCall.originY;
+          return clampCallLayout({
+            x: nextX,
+            y: nextY,
+            width: size.width,
+            height: size.height
+          });
+        }())
       : clampCallLayout({
           x: state.draggingCall.originX + (event.clientX - state.draggingCall.startX),
           y: state.draggingCall.originY + (event.clientY - state.draggingCall.startY),
@@ -2273,6 +2332,7 @@
     if (card) {
       card.classList.remove("is-dragging");
       card.releasePointerCapture?.(event.pointerId);
+      card.style.cursor = "";
     }
 
     state.draggingCall = null;
