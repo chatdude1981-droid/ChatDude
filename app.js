@@ -89,8 +89,6 @@
     roomPickerOverlay: document.getElementById("room-picker-overlay"),
     roomPickerList: document.getElementById("room-picker-list"),
     joinAudioBtn: document.getElementById("join-audio-btn"),
-    leaveCallBtn: document.getElementById("leave-call-btn"),
-    pushToTalkBtn: document.getElementById("push-to-talk-btn"),
     messages: document.getElementById("messages"),
     messageForm: document.getElementById("message-form"),
     messageInput: document.getElementById("message-input"),
@@ -312,18 +310,10 @@
     elements.openPreferencesInlineBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
     elements.joinAudioBtn.disabled = false;
-    elements.leaveCallBtn.disabled = !state.isPublishing;
     elements.joinAudioBtn.title = state.isPublishing
       ? "Stop publishing your camera"
       : "Publish your camera";
     elements.joinAudioBtn.classList.toggle("is-active", state.isPublishing);
-    elements.leaveCallBtn.title = state.isPublishing ? "Stop publishing your camera" : "Your camera is not published";
-    elements.pushToTalkBtn.disabled = !state.isPublishing;
-    elements.pushToTalkBtn.title = state.isPublishing
-      ? (state.micEnabled ? "Mute your microphone" : "Unmute your microphone")
-      : "Publish your camera first";
-    elements.pushToTalkBtn.textContent = state.micEnabled ? "Mute" : "Unmute";
-    elements.pushToTalkBtn.classList.toggle("is-active", state.isPublishing && !state.micEnabled);
     elements.presenceStatusSelect.value = state.me.presenceStatus || "online";
     elements.presenceStatusSelect.disabled = !state.socket;
     renderPmInbox();
@@ -432,7 +422,6 @@
     state.localStream.getAudioTracks().forEach(function (track) {
       track.enabled = enabled;
     });
-    elements.pushToTalkBtn.classList.toggle("is-active", enabled);
   }
 
   function renderCallPanel() {
@@ -529,10 +518,16 @@
         remoteVideo.autoplay = true;
         remoteVideo.playsInline = true;
         remoteVideo.srcObject = remoteStream;
-        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: false };
+        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: true };
         remoteVideo.volume = remoteSettings.volume;
         remoteVideo.muted = remoteSettings.muted;
         card.appendChild(remoteVideo);
+        const playAttempt = remoteVideo.play();
+        if (playAttempt && typeof playAttempt.catch === "function") {
+          playAttempt.catch(function () {
+            remoteVideo.muted = true;
+          });
+        }
       } else {
         const avatar = document.createElement("div");
         avatar.className = "call-avatar";
@@ -553,7 +548,7 @@
         `;
         card.appendChild(controls);
       } else if (remoteStream) {
-        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: false };
+        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: true };
         const controls = document.createElement("div");
         controls.className = "camera-controls";
         controls.innerHTML = `
@@ -1078,7 +1073,7 @@
       state.remoteStreams.set(targetSocketId, stream);
       state.remoteSettings[targetSocketId] = state.remoteSettings[targetSocketId] || {
         volume: 1,
-        muted: false
+        muted: true
       };
       renderCallPanel();
     };
@@ -2253,7 +2248,7 @@
       const remoteMuteButton = event.target.closest("[data-toggle-remote-mute]");
       if (remoteMuteButton) {
         const socketId = remoteMuteButton.dataset.toggleRemoteMute;
-        const existing = state.remoteSettings[socketId] || { volume: 1, muted: false };
+        const existing = state.remoteSettings[socketId] || { volume: 1, muted: true };
         state.remoteSettings[socketId] = {
           volume: existing.volume,
           muted: !existing.muted
@@ -2268,7 +2263,7 @@
       }
 
       const socketId = volumeSlider.dataset.remoteVolume;
-      const existing = state.remoteSettings[socketId] || { volume: 1, muted: false };
+      const existing = state.remoteSettings[socketId] || { volume: 1, muted: true };
       state.remoteSettings[socketId] = {
         volume: Number(volumeSlider.value),
         muted: existing.muted
@@ -2299,10 +2294,6 @@
 
       startCall();
     });
-    elements.leaveCallBtn.addEventListener("click", function () {
-      leaveCall();
-    });
-    elements.pushToTalkBtn.addEventListener("click", toggleLocalMicrophone);
     elements.deleteRoomBtn.addEventListener("click", handleDeleteRoom);
 
     elements.roomList.addEventListener("click", function (event) {
