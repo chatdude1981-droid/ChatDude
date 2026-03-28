@@ -220,10 +220,8 @@
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
     elements.openPreferencesBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
-    const browserSupportsCalls = Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
-    const canUseCalls = Boolean(state.me && !state.me.isGuest && browserSupportsCalls);
-    elements.joinAudioBtn.disabled = !canUseCalls || Boolean(state.callMode);
-    elements.joinVideoBtn.disabled = !canUseCalls || Boolean(state.callMode);
+    elements.joinAudioBtn.disabled = Boolean(state.callMode);
+    elements.joinVideoBtn.disabled = Boolean(state.callMode);
     elements.leaveCallBtn.disabled = !state.callMode;
   }
 
@@ -652,6 +650,11 @@
       return;
     }
 
+    if (!window.isSecureContext) {
+      showToast("Voice and video need HTTPS or localhost to access devices.", "error");
+      return;
+    }
+
     if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) {
       showToast("This browser does not support WebRTC room calls here.", "error");
       return;
@@ -660,7 +663,7 @@
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: mode === "video"
+        video: mode === "video" ? { facingMode: "user" } : false
       });
 
       cleanupCallState();
@@ -673,7 +676,22 @@
         state.socket.emit("join call", { mediaKind: mode });
       }
     } catch (error) {
-      showToast("Microphone or camera access was denied.", "error");
+      if (error && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")) {
+        showToast("Browser permission was denied for microphone or camera.", "error");
+        return;
+      }
+
+      if (error && (error.name === "NotFoundError" || error.name === "DevicesNotFoundError")) {
+        showToast("No usable microphone or camera was found on this device.", "error");
+        return;
+      }
+
+      if (error && error.name === "NotReadableError") {
+        showToast("Your microphone or camera is busy in another app.", "error");
+        return;
+      }
+
+      showToast(`Unable to start ${mode === "video" ? "video" : "voice"}: ${error?.message || "unknown error"}`, "error");
     }
   }
 
