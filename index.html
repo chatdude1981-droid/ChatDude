@@ -144,6 +144,17 @@
           </div>
         </aside>
 
+        <section id="call-panel" class="call-panel card">
+          <div class="call-panel-header">
+            <div>
+              <span class="eyebrow">Room Call</span>
+              <h4 id="call-status-title">Voice and video</h4>
+            </div>
+            <span id="call-status-note" class="subtle-copy">Registered users can join the room call.</span>
+          </div>
+          <div id="call-participants" class="call-participants"></div>
+        </section>
+
         <main class="chat-panel card">
           <div class="chat-panel-header">
             <div>
@@ -155,27 +166,10 @@
             </div>
           </div>
 
-          <section id="call-panel" class="call-panel">
-            <div class="call-panel-header">
-              <div>
-                <span class="eyebrow">Room Call</span>
-                <h4 id="call-status-title">Voice and video</h4>
-              </div>
-              <span id="call-status-note" class="subtle-copy">Registered users can join the room call.</span>
-            </div>
-            <div id="call-participants" class="call-participants"></div>
-          </section>
-
           <ul id="messages" class="messages"></ul>
 
           <form id="message-form" class="composer">
-            <input
-              id="message-input"
-              autocomplete="off"
-              maxlength="600"
-              placeholder="Type a message for the room..."
-            />
-            <div class="composer-tools">
+            <div class="composer-tools composer-tools-left">
               <button id="join-audio-btn" class="ghost-button icon-control" type="button" aria-label="Join voice" title="Join voice">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"></path>
@@ -196,6 +190,17 @@
                   <path d="M9 15.5v2.5"></path>
                   <path d="M15 15.5v2.5"></path>
                 </svg>
+              </button>
+            </div>
+            <input
+              id="message-input"
+              autocomplete="off"
+              maxlength="600"
+              placeholder="Type a message for the room..."
+            />
+            <div class="composer-tools composer-tools-right">
+              <button id="push-to-talk-btn" class="ghost-button push-to-talk-btn" type="button" aria-label="Hold to talk" title="Hold to talk">
+                Hold to Talk
               </button>
               <button id="send-message-btn" type="submit">Send</button>
             </div>

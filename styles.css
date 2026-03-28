@@ -140,10 +140,11 @@ button:active {
 }
 
 .page-shell {
-  width: min(1440px, calc(100vw - 24px));
+  width: calc(100vw - 20px);
   margin: 0 auto;
-  padding: 12px 0;
-  height: 100vh;
+  padding: 10px 0;
+  height: calc(100dvh - 20px);
+  max-width: none;
 }
 
 .card {
@@ -291,8 +292,10 @@ button:active {
 
 .chat-shell {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   height: 100%;
+  min-height: 0;
 }
 
 .topbar {
@@ -396,7 +399,7 @@ button:active {
 
 .chat-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 10px;
   min-height: 0;
   height: 100%;
@@ -411,7 +414,6 @@ button:active {
 }
 
 .header-side,
-.call-controls,
 .call-panel-header {
   display: flex;
   align-items: center;
@@ -423,6 +425,7 @@ button:active {
 }
 
 .call-panel {
+  grid-column: 2 / 4;
   display: grid;
   gap: 10px;
   padding: 10px;
@@ -430,6 +433,7 @@ button:active {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.035);
   overflow: hidden;
+  min-height: 0;
 }
 
 .call-panel-header {
@@ -442,8 +446,8 @@ button:active {
 
 .call-participants {
   position: relative;
-  min-height: 180px;
-  height: min(24vh, 220px);
+  min-height: 220px;
+  height: min(28vh, 260px);
   overflow: hidden;
   border-radius: 18px;
   background: rgba(3, 8, 18, 0.46);
@@ -452,18 +456,49 @@ button:active {
 .call-card {
   position: absolute;
   overflow: hidden;
-  width: 170px;
-  height: 114px;
-  border-radius: 18px;
+  width: 136px;
+  height: 96px;
+  border-radius: 16px;
   background: rgba(5, 11, 22, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  cursor: grab;
   user-select: none;
-  touch-action: none;
 }
 
 .call-card.is-dragging {
   cursor: grabbing;
+}
+
+.call-drag-bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  background: rgba(2, 6, 23, 0.86);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: grab;
+  z-index: 2;
+  touch-action: none;
+}
+
+.call-drag-bar strong {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.call-drag-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .call-card video {
@@ -472,6 +507,7 @@ button:active {
   object-fit: cover;
   display: block;
   background: #020617;
+  padding-top: 26px;
 }
 
 .call-card.is-audio-only {
@@ -486,8 +522,8 @@ button:active {
 .call-avatar {
   display: grid;
   place-items: center;
-  width: 68px;
-  height: 68px;
+  width: 54px;
+  height: 54px;
   border-radius: 999px;
   background: rgba(56, 189, 248, 0.14);
   color: color-mix(in oklab, var(--accent) 72%, white);
@@ -508,6 +544,7 @@ button:active {
   background: rgba(2, 6, 23, 0.74);
   color: var(--text);
   pointer-events: none;
+  z-index: 2;
 }
 
 .call-role {
@@ -523,6 +560,7 @@ button:active {
   max-height: none;
   overflow-y: auto;
   padding-right: 4px;
+  height: 100%;
 }
 
 .message-item {
@@ -606,7 +644,7 @@ button:active {
 
 .composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
 }
@@ -617,28 +655,50 @@ button:active {
   gap: 8px;
 }
 
+.composer-tools-left {
+  justify-content: flex-start;
+}
+
+.composer-tools-right {
+  justify-content: flex-end;
+}
+
 .composer button {
   width: auto;
   min-width: 88px;
 }
 
 .icon-control {
-  width: 42px;
-  min-width: 42px;
-  height: 42px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
   padding: 0;
   display: inline-grid;
   place-items: center;
 }
 
 .icon-control svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.push-to-talk-btn {
+  min-width: 112px;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.push-to-talk-btn.is-active {
+  background: rgba(52, 211, 153, 0.18);
+  border-color: rgba(52, 211, 153, 0.32);
+  color: #d1fae5;
 }
 
 .side-panel {
@@ -776,6 +836,10 @@ button:active {
     grid-template-columns: 220px minmax(0, 1fr);
   }
 
+  .call-panel {
+    grid-column: 2 / 3;
+  }
+
   .side-panel {
     grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -787,6 +851,10 @@ button:active {
   .app-grid,
   .side-panel {
     grid-template-columns: 1fr;
+  }
+
+  .app-grid {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
   }
 
   .hero-grid {
@@ -801,6 +869,10 @@ button:active {
 
   .header-side {
     align-items: flex-start;
+  }
+
+  .call-panel {
+    grid-column: auto;
   }
 }
 
@@ -825,7 +897,6 @@ button:active {
     border-radius: 24px;
   }
 
-  .composer,
   .color-row {
     grid-template-columns: 1fr;
   }
@@ -835,8 +906,12 @@ button:active {
     justify-content: space-between;
   }
 
+  .composer {
+    grid-template-columns: 1fr;
+  }
+
   .call-card {
-    width: 150px;
-    height: 102px;
+    width: 126px;
+    height: 90px;
   }
 }

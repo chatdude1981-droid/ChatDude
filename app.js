@@ -65,6 +65,7 @@
     joinAudioBtn: document.getElementById("join-audio-btn"),
     joinVideoBtn: document.getElementById("join-video-btn"),
     leaveCallBtn: document.getElementById("leave-call-btn"),
+    pushToTalkBtn: document.getElementById("push-to-talk-btn"),
     messages: document.getElementById("messages"),
     messageForm: document.getElementById("message-form"),
     messageInput: document.getElementById("message-input"),
@@ -229,6 +230,8 @@
     elements.joinAudioBtn.title = state.callMode ? "Already in a call" : "Join voice call";
     elements.joinVideoBtn.title = state.callMode ? "Already in a call" : "Join video call";
     elements.leaveCallBtn.title = state.callMode ? "Leave call" : "Not in a call";
+    elements.pushToTalkBtn.disabled = !state.callMode;
+    elements.pushToTalkBtn.title = state.callMode ? "Hold to talk" : "Join a call first";
   }
 
   function canManageActiveRoom() {
@@ -283,19 +286,19 @@
   }
 
   function getDefaultCallPosition(index) {
-    const column = index % 3;
-    const row = Math.floor(index / 3);
+    const column = index % 4;
+    const row = Math.floor(index / 4);
 
     return {
-      x: 12 + (column * 182),
-      y: 12 + (row * 126)
+      x: 10 + (column * 144),
+      y: 10 + (row * 104)
     };
   }
 
   function clampCallPosition(position) {
     const container = elements.callParticipants;
-    const maxX = Math.max(0, container.clientWidth - 170);
-    const maxY = Math.max(0, container.clientHeight - 114);
+    const maxX = Math.max(0, container.clientWidth - 136);
+    const maxY = Math.max(0, container.clientHeight - 96);
 
     return {
       x: Math.min(Math.max(position.x, 0), maxX),
@@ -311,6 +314,7 @@
     state.localStream.getAudioTracks().forEach(function (track) {
       track.enabled = enabled;
     });
+    elements.pushToTalkBtn.classList.toggle("is-active", enabled);
   }
 
   function canUsePushToTalk(eventTarget) {
@@ -339,7 +343,7 @@
           : "Sign in to use room calls.";
     } else if (state.callMode) {
       elements.callStatusTitle.textContent = state.callMode === "video" ? "Video call live" : "Voice call live";
-      elements.callStatusNote.textContent = `${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"} connected. Hold Alt to talk and drag tiles to reposition them.`;
+      elements.callStatusNote.textContent = `${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"} connected. Hold the talk button or Alt to use your mic and drag title bars to move tiles.`;
     } else {
       elements.callStatusTitle.textContent = "Voice and video";
       elements.callStatusNote.textContent = roomHasParticipants
@@ -367,6 +371,15 @@
       state.callLayout[participant.socketId] = position;
       card.style.left = `${position.x}px`;
       card.style.top = `${position.y}px`;
+
+      const dragBar = document.createElement("div");
+      dragBar.className = "call-drag-bar";
+      dragBar.dataset.callDragHandle = "true";
+      dragBar.innerHTML = `
+        <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
+        <span class="call-drag-dot">::</span>
+      `;
+      card.appendChild(dragBar);
 
       if (participant.socketId === state.currentSocketId && state.localStream) {
         if (state.callMode === "video") {
@@ -1260,7 +1273,8 @@
   }
 
   function handleCallPointerDown(event) {
-    const card = event.target.closest("[data-call-socket-id]");
+    const handle = event.target.closest("[data-call-drag-handle='true']");
+    const card = handle ? handle.closest("[data-call-socket-id]") : null;
     if (!card) {
       return;
     }
@@ -1277,9 +1291,6 @@
     };
 
     card.classList.add("is-dragging");
-    if (card.setPointerCapture) {
-      card.setPointerCapture(event.pointerId);
-    }
     event.preventDefault();
   }
 
@@ -1305,9 +1316,6 @@
     const card = elements.callParticipants.querySelector(`[data-call-socket-id="${state.draggingCall.socketId}"]`);
     if (card) {
       card.classList.remove("is-dragging");
-      if (card.releasePointerCapture) {
-        card.releasePointerCapture(event.pointerId);
-      }
     }
 
     state.draggingCall = null;
@@ -1338,6 +1346,31 @@
     });
     elements.leaveCallBtn.addEventListener("click", function () {
       leaveCall();
+    });
+    elements.pushToTalkBtn.addEventListener("pointerdown", function (event) {
+      if (!state.callMode) {
+        return;
+      }
+
+      state.pushToTalkActive = true;
+      setMicrophoneEnabled(true);
+      event.preventDefault();
+    });
+    elements.pushToTalkBtn.addEventListener("pointerup", function () {
+      if (!state.callMode) {
+        return;
+      }
+
+      state.pushToTalkActive = false;
+      setMicrophoneEnabled(false);
+    });
+    elements.pushToTalkBtn.addEventListener("pointerleave", function () {
+      if (!state.callMode || !state.pushToTalkActive) {
+        return;
+      }
+
+      state.pushToTalkActive = false;
+      setMicrophoneEnabled(false);
     });
     elements.deleteRoomBtn.addEventListener("click", handleDeleteRoom);
 
