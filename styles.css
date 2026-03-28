@@ -147,6 +147,11 @@ button:active {
   max-width: none;
 }
 
+body.has-split-call .page-shell {
+  width: calc(50vw - 18px);
+  margin: 0 auto 0 10px;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -774,6 +779,11 @@ button:active {
   border: none;
 }
 
+body.has-split-call .call-card.is-maximized {
+  inset: 10px 10px 10px calc(50vw + 6px);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .call-card.is-maximized .call-drag-bar {
   height: 42px;
   padding: 0 14px;
@@ -789,6 +799,12 @@ button:active {
 .call-card.is-maximized .camera-controls {
   top: 50px;
   right: 14px;
+}
+
+body.has-split-call .chat-shell,
+body.has-split-call .workspace,
+body.has-split-call .chat-panel {
+  min-width: 0;
 }
 
 
@@ -1423,6 +1439,16 @@ button:active {
 }
 
 @media (max-width: 1180px) {
+  body.has-split-call .page-shell {
+    width: calc(100vw - 20px);
+    margin: 0 auto;
+  }
+
+  body.has-split-call .call-card.is-maximized {
+    inset: 0;
+    border-left: none;
+  }
+
   .app-grid {
     grid-template-columns: minmax(0, 1fr) 280px;
   }

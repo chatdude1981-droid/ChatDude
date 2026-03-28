@@ -496,6 +496,7 @@
 
   function renderCallPanel() {
     elements.callParticipants.innerHTML = "";
+    document.body.classList.toggle("has-split-call", Boolean(state.maximizedCallId));
 
     const allPublishers = state.mediaPublishers.slice();
     if (state.isPublishing && !allPublishers.some(function (publisher) { return publisher.socketId === state.currentSocketId; })) {
@@ -515,7 +516,16 @@
     });
 
     if (!visiblePublishers.length) {
+      if (state.maximizedCallId) {
+        state.maximizedCallId = "";
+        document.body.classList.remove("has-split-call");
+      }
       return;
+    }
+
+    if (state.maximizedCallId && !visiblePublishers.some(function (participant) { return participant.socketId === state.maximizedCallId; })) {
+      state.maximizedCallId = "";
+      document.body.classList.remove("has-split-call");
     }
 
     visiblePublishers.forEach(function (participant) {
@@ -1194,6 +1204,8 @@
     state.micEnabled = false;
     state.mediaPublishers = [];
     state.openMediaIds.clear();
+    state.maximizedCallId = "";
+    document.body.classList.remove("has-split-call");
     renderAccount();
     renderCallPanel();
   }
