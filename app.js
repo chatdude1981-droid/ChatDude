@@ -318,6 +318,40 @@
     }
   }
 
+  function playIncomingCallTone() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+
+    try {
+      if (!state.callAudioContext) {
+        state.callAudioContext = new AudioContextClass();
+      }
+      const audioContext = state.callAudioContext;
+      if (audioContext.state === "suspended") {
+        audioContext.resume().catch(function () {});
+      }
+
+      const now = audioContext.currentTime;
+      [0, 0.34].forEach(function (offset, index) {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(index === 0 ? 720 : 860, now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.09, now + offset + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.26);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(now + offset);
+        oscillator.stop(now + offset + 0.28);
+      });
+    } catch (_error) {
+      // ignore call notification sound failures
+    }
+  }
+
   function styleFromPreferences(preferences) {
     const safe = preferences || {};
     const style = [];
@@ -1875,6 +1909,8 @@
         displayName: payload.fromDisplayName,
         socketId: payload.fromSocketId
       });
+      playIncomingCallTone();
+      renderPmWindow();
       showToast(`${payload.fromDisplayName || payload.fromUsername} wants to start a private ${payload.mode} chat.`, "success");
     });
 
@@ -2255,7 +2291,7 @@
 
     window.setTimeout(function () {
       startPmCall(mode);
-    }, 0);
+    }, 30);
   }
 
   function sendPrivateMessage() {

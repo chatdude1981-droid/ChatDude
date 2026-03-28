@@ -1100,9 +1100,18 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession) return;
-    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
-    if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
-    if (!["audio", "video"].includes(mode)) return;
+    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") {
+      socket.emit("error message", "Private calls are currently limited to registered users.");
+      return;
+    }
+    if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) {
+      socket.emit("error message", "This user is not available for private calls.");
+      return;
+    }
+    if (!["audio", "video"].includes(mode)) {
+      socket.emit("error message", "That private call type is not supported.");
+      return;
+    }
     if (
       sanitizePreferences(currentSession.preferences || {}).allowPrivateCalls === false ||
       sanitizePreferences(targetSession.preferences || {}).allowPrivateCalls === false
@@ -1124,8 +1133,12 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession) return;
-    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
-    if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
+    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") {
+      return;
+    }
+    if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) {
+      return;
+    }
     if (
       sanitizePreferences(currentSession.preferences || {}).allowPrivateCalls === false ||
       sanitizePreferences(targetSession.preferences || {}).allowPrivateCalls === false
