@@ -217,6 +217,7 @@ function sanitizePreferences(preferences = {}) {
       ? preferences.backgroundStyle
       : "aurora",
     showJoinLeaveMessages: preferences.showJoinLeaveMessages !== false,
+    allowPrivateCalls: preferences.allowPrivateCalls !== false,
     privacy: {
       allowGuestCameraView: privacy.allowGuestCameraView !== false
     }
@@ -974,6 +975,13 @@ io.on("connection", (socket) => {
     if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
     if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
     if (!["audio", "video"].includes(mode)) return;
+    if (
+      sanitizePreferences(currentSession.preferences || {}).allowPrivateCalls === false ||
+      sanitizePreferences(targetSession.preferences || {}).allowPrivateCalls === false
+    ) {
+      socket.emit("error message", "Private calls are turned off for one of these users.");
+      return;
+    }
     touchSession(currentSession);
 
     io.to(toSocketId).emit("pm media request", {
@@ -990,6 +998,12 @@ io.on("connection", (socket) => {
     if (!currentSession || !targetSession) return;
     if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
     if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
+    if (
+      sanitizePreferences(currentSession.preferences || {}).allowPrivateCalls === false ||
+      sanitizePreferences(targetSession.preferences || {}).allowPrivateCalls === false
+    ) {
+      return;
+    }
     touchSession(currentSession);
 
     io.to(toSocketId).emit("pm media accept", {

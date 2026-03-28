@@ -80,9 +80,11 @@
     inboxCount: document.getElementById("inbox-count"),
     pmInboxPopover: document.getElementById("pm-inbox-popover"),
     presenceStatusSelect: document.getElementById("presence-status-select"),
+    accountMenu: document.getElementById("account-menu"),
+    accountMenuTitle: document.getElementById("account-menu-title"),
+    accountMenuCloseBtn: document.getElementById("account-menu-close-btn"),
     openRoomModalBtn: document.getElementById("open-room-modal-btn"),
     deleteRoomBtn: document.getElementById("delete-room-btn"),
-    openPreferencesInlineBtn: document.getElementById("open-preferences-inline-btn"),
     logoutBtn: document.getElementById("logout-btn"),
     guestUpgradeCard: document.getElementById("guest-upgrade-card"),
     roomList: document.getElementById("room-list"),
@@ -121,14 +123,13 @@
     roomCancelBtn: document.getElementById("room-cancel-btn"),
     roomNameInput: document.getElementById("room-name-input"),
     roomDescriptionInput: document.getElementById("room-description-input"),
-    preferencesModalOverlay: document.getElementById("preferences-modal-overlay"),
     preferencesForm: document.getElementById("preferences-form"),
-    preferencesCancelBtn: document.getElementById("preferences-cancel-btn"),
     fontSelect: document.getElementById("font-select"),
     accentColorInput: document.getElementById("accent-color-input"),
     backgroundStyleSelect: document.getElementById("background-style-select"),
     allowGuestCameraView: document.getElementById("allow-guest-camera-view"),
     showJoinLeaveMessages: document.getElementById("show-join-leave-messages"),
+    allowPrivateCalls: document.getElementById("allow-private-calls"),
     blockedUsersList: document.getElementById("blocked-users-list"),
     toastStack: document.getElementById("toast-stack")
   };
@@ -257,7 +258,8 @@
       textColor: "#edf4ff",
       fontFamily: "Space Grotesk",
       backgroundStyle: "aurora",
-      showJoinLeaveMessages: true
+      showJoinLeaveMessages: true,
+      allowPrivateCalls: true
     };
 
     document.body.dataset.backgroundStyle = preferences.backgroundStyle;
@@ -267,6 +269,7 @@
     elements.backgroundStyleSelect.value = preferences.backgroundStyle;
     elements.allowGuestCameraView.checked = preferences.privacy?.allowGuestCameraView !== false;
     elements.showJoinLeaveMessages.checked = preferences.showJoinLeaveMessages !== false;
+    elements.allowPrivateCalls.checked = preferences.allowPrivateCalls !== false;
     elements.messageInput.style.cssText = styleFromPreferences(preferences);
     elements.pmWindowInput.style.cssText = styleFromPreferences(preferences);
     renderBlockedUsers();
@@ -274,6 +277,14 @@
 
   function showJoinLeaveMessagesEnabled() {
     return !state.me || state.me.preferences?.showJoinLeaveMessages !== false;
+  }
+
+  function privateCallsEnabledForCurrentUser() {
+    return !state.me || state.me.preferences?.allowPrivateCalls !== false;
+  }
+
+  function privateCallsEnabledForUser(user) {
+    return !user || user.preferences?.allowPrivateCalls !== false;
   }
 
   function isPresenceSystemMessage(message) {
@@ -362,9 +373,9 @@
       <strong>${escapeHtml(state.me.displayName || state.me.username)}</strong>
       ${roleLabel}
     `;
+    elements.accountMenuTitle.textContent = state.me.displayName || state.me.username;
 
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
-    elements.openPreferencesInlineBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
     elements.joinAudioBtn.disabled = false;
     elements.joinAudioBtn.title = state.isPublishing
@@ -1141,14 +1152,14 @@
     const targetUser = getConversationTarget(state.activePmUser.username);
     const canPm = canReplyToPmConversation(state.activePmUser.username);
     const online = Boolean(targetUser && targetUser.socketId);
-    const callDisabled = !canPm || !online;
+    const callDisabled = !canPm || !online || !privateCallsEnabledForCurrentUser() || !privateCallsEnabledForUser(targetUser);
 
     elements.pmWindowInput.disabled = !canPm || !online;
     elements.pmSendBtn.disabled = !canPm || !online;
     elements.pmAudioBtn.disabled = callDisabled;
     elements.pmVideoBtn.disabled = callDisabled;
-    elements.pmAudioBtn.title = callDisabled ? "User must be online to start a private call" : "Start private voice call";
-    elements.pmVideoBtn.title = callDisabled ? "User must be online to start a private call" : "Start private video call";
+    elements.pmAudioBtn.title = callDisabled ? "Private calls are unavailable for this conversation right now" : "Start private voice call";
+    elements.pmVideoBtn.title = callDisabled ? "Private calls are unavailable for this conversation right now" : "Start private video call";
 
     renderPmThread();
     renderPmRequestBanner();
@@ -1379,6 +1390,20 @@
     elements.userMenu.classList.add("hidden");
   }
 
+  function openAccountMenu() {
+    if (!state.me) {
+      return;
+    }
+    applyPreferences();
+    elements.accountMenu.classList.remove("hidden");
+    elements.accountBadge.setAttribute("aria-expanded", "true");
+  }
+
+  function closeAccountMenu() {
+    elements.accountMenu.classList.add("hidden");
+    elements.accountBadge.setAttribute("aria-expanded", "false");
+  }
+
   function openModal(overlay) {
     overlay.classList.remove("hidden");
   }
@@ -1571,10 +1596,18 @@
       showToast("Private calls are available for registered users.", "error");
       return;
     }
+    if (!privateCallsEnabledForCurrentUser()) {
+      showToast("Turn private calls back on in your account menu to start a call.", "error");
+      return;
+    }
 
     const targetUser = getConversationTarget(state.activePmUser.username);
     if (!targetUser || !targetUser.socketId) {
       showToast("That user is not online right now.", "error");
+      return;
+    }
+    if (!privateCallsEnabledForUser(targetUser)) {
+      showToast("That user is not accepting private calls right now.", "error");
       return;
     }
 
@@ -1602,6 +1635,11 @@
   async function acceptPmCall() {
     const request = state.pmCall.incomingRequest;
     if (!request || !state.socket) {
+      return;
+    }
+    if (!privateCallsEnabledForCurrentUser()) {
+      declinePmCall();
+      showToast("Private calls are turned off in your account settings.", "error");
       return;
     }
 
@@ -1789,6 +1827,12 @@
     });
 
     socket.on("pm media request", function (payload) {
+      if (!privateCallsEnabledForCurrentUser()) {
+        socket.emit("pm media decline", {
+          toSocketId: payload.fromSocketId
+        });
+        return;
+      }
       state.pmCall.incomingRequest = payload;
       openPmConversation({
         username: payload.fromUsername,
@@ -2085,6 +2129,7 @@
             textColor: elements.accentColorInput.value,
             backgroundStyle: elements.backgroundStyleSelect.value,
             showJoinLeaveMessages: elements.showJoinLeaveMessages.checked,
+            allowPrivateCalls: elements.allowPrivateCalls.checked,
             privacy: {
               allowGuestCameraView: elements.allowGuestCameraView.checked
             }
@@ -2094,7 +2139,7 @@
 
       state.me = payload.user;
       applyPreferences();
-      closeModal(elements.preferencesModalOverlay);
+      closeAccountMenu();
       showToast("Appearance updated.", "success");
     } catch (error) {
       showToast(error.message, "error");
@@ -2673,6 +2718,11 @@
       }
       closeUserMenu();
 
+      if (event.target.closest("#account-badge") || event.target.closest("#account-menu")) {
+        return;
+      }
+      closeAccountMenu();
+
       if (event.target.closest("#open-inbox-btn") || event.target.closest("#pm-inbox-popover")) {
         return;
       }
@@ -2684,10 +2734,10 @@
       sendActivityPing(false);
       if (event.key === "Escape") {
         closeUserMenu();
+        closeAccountMenu();
         closePmInbox();
         closePmWindow();
         closeModal(elements.roomModalOverlay);
-        closeModal(elements.preferencesModalOverlay);
       }
     });
 
@@ -2741,6 +2791,7 @@
     });
 
     elements.openRoomModalBtn.addEventListener("click", function () {
+      closeAccountMenu();
       openModal(elements.roomModalOverlay);
       window.setTimeout(function () {
         elements.roomNameInput.focus();
@@ -2751,12 +2802,16 @@
     });
     elements.roomForm.addEventListener("submit", handleCreateRoom);
 
-    elements.openPreferencesInlineBtn.addEventListener("click", function () {
-      applyPreferences();
-      openModal(elements.preferencesModalOverlay);
+    elements.accountBadge.addEventListener("click", function (event) {
+      event.stopPropagation();
+      if (elements.accountMenu.classList.contains("hidden")) {
+        openAccountMenu();
+      } else {
+        closeAccountMenu();
+      }
     });
-    elements.preferencesCancelBtn.addEventListener("click", function () {
-      closeModal(elements.preferencesModalOverlay);
+    elements.accountMenuCloseBtn.addEventListener("click", function () {
+      closeAccountMenu();
     });
     elements.preferencesForm.addEventListener("submit", handleSavePreferences);
     elements.blockedUsersList.addEventListener("click", function (event) {
@@ -2773,8 +2828,7 @@
     });
 
     [
-      elements.roomModalOverlay,
-      elements.preferencesModalOverlay
+      elements.roomModalOverlay
     ].forEach(function (overlay) {
       overlay.addEventListener("click", function (event) {
         if (event.target === overlay) {

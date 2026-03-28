@@ -132,17 +132,74 @@
               <ul id="pm-feed" class="pm-feed"></ul>
             </div>
           </div>
-          <label class="status-control" for="presence-status-select">
-            <span>Status</span>
-            <select id="presence-status-select">
-              <option value="online">Online</option>
-              <option value="busy">Busy</option>
-            </select>
-          </label>
-          <div id="account-badge" class="account-badge"></div>
-          <button id="open-room-modal-btn" class="ghost-button hidden" type="button">New Room</button>
-          <button id="delete-room-btn" class="ghost-button hidden" type="button">Delete Room</button>
-          <button id="logout-btn" class="ghost-button" type="button">Leave</button>
+          <button id="account-badge" class="account-badge account-badge-button" type="button" aria-haspopup="dialog" aria-expanded="false"></button>
+          <div id="account-menu" class="account-menu hidden">
+            <div class="account-menu-header">
+              <div>
+                <span class="eyebrow">Account</span>
+                <h3 id="account-menu-title">Settings</h3>
+              </div>
+              <button id="account-menu-close-btn" class="icon-button" type="button">Close</button>
+            </div>
+            <form id="preferences-form" class="stack-form account-menu-form">
+              <label class="field">
+                <span>Status</span>
+                <select id="presence-status-select">
+                  <option value="online">Online</option>
+                  <option value="busy">Busy</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Font</span>
+                <select id="font-select">
+                  <option value="Space Grotesk">Space Grotesk</option>
+                  <option value="DM Sans">DM Sans</option>
+                  <option value="Manrope">Manrope</option>
+                  <option value="IBM Plex Sans">IBM Plex Sans</option>
+                  <option value="Outfit">Outfit</option>
+                  <option value="Sora">Sora</option>
+                  <option value="Nunito">Nunito</option>
+                  <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
+                  <option value="Bricolage Grotesque">Bricolage Grotesque</option>
+                  <option value="Figtree">Figtree</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Text color</span>
+                <input id="accent-color-input" type="color" value="#edf4ff" />
+              </label>
+              <label class="field">
+                <span>Background</span>
+                <select id="background-style-select">
+                  <option value="aurora">Aurora</option>
+                  <option value="midnight">Midnight</option>
+                  <option value="sunrise">Sunrise</option>
+                </select>
+              </label>
+              <label class="field checkbox-field">
+                <input id="allow-guest-camera-view" type="checkbox" checked />
+                <span>Allow guests to view my camera</span>
+              </label>
+              <label class="field checkbox-field">
+                <input id="show-join-leave-messages" type="checkbox" checked />
+                <span>Show join and leave messages</span>
+              </label>
+              <label class="field checkbox-field">
+                <input id="allow-private-calls" type="checkbox" checked />
+                <span>Allow private voice and video calls</span>
+              </label>
+              <div class="field">
+                <span>Blocked users</span>
+                <div id="blocked-users-list" class="blocked-users-list"></div>
+              </div>
+              <div class="account-menu-actions">
+                <button id="open-room-modal-btn" class="ghost-button hidden" type="button">New Room</button>
+                <button id="delete-room-btn" class="ghost-button hidden" type="button">Delete Room</button>
+                <button id="logout-btn" class="ghost-button" type="button">Leave</button>
+                <button type="submit">Save settings</button>
+              </div>
+            </form>
+          </div>
         </div>
       </header>
 
@@ -163,14 +220,6 @@
 
             <form id="message-form" class="composer">
               <div class="composer-tools composer-tools-left">
-                <button id="open-preferences-inline-btn" class="ghost-button icon-control hidden" type="button" aria-label="Appearance settings" title="Appearance settings">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 3a2 2 0 0 1 2 2c0 .6-.2 1.17-.57 1.63A2 2 0 0 0 15 10h4a2 2 0 1 1 0 4h-1.5a2 2 0 0 0-1.88 2.68A2 2 0 1 1 13 19a2 2 0 0 0-2-2H8a5 5 0 1 1 0-10h4a2 2 0 0 0 0-4z"></path>
-                    <circle cx="7.5" cy="12.5" r="1"></circle>
-                    <circle cx="12" cy="8" r="1"></circle>
-                    <circle cx="16.5" cy="12" r="1"></circle>
-                  </svg>
-                </button>
                 <button id="join-audio-btn" class="ghost-button icon-control" type="button" aria-label="Publish camera" title="Publish camera">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M15 10.5 19.5 7v10L15 13.5"></path>
@@ -302,60 +351,6 @@
           <input id="room-description-input" maxlength="80" placeholder="Why this room exists" />
         </label>
         <button type="submit">Create room</button>
-      </form>
-    </div>
-  </div>
-
-  <div id="preferences-modal-overlay" class="modal-overlay hidden">
-    <div class="modal card">
-      <div class="modal-header">
-        <div>
-          <span class="eyebrow">Appearance & Privacy</span>
-          <h3>Make ChatDude yours</h3>
-        </div>
-        <button id="preferences-cancel-btn" class="icon-button" type="button">Close</button>
-      </div>
-      <form id="preferences-form" class="stack-form">
-        <label class="field">
-          <span>Font</span>
-          <select id="font-select">
-            <option value="Space Grotesk">Space Grotesk</option>
-            <option value="DM Sans">DM Sans</option>
-            <option value="Manrope">Manrope</option>
-            <option value="IBM Plex Sans">IBM Plex Sans</option>
-            <option value="Outfit">Outfit</option>
-            <option value="Sora">Sora</option>
-            <option value="Nunito">Nunito</option>
-            <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
-            <option value="Bricolage Grotesque">Bricolage Grotesque</option>
-            <option value="Figtree">Figtree</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Text color</span>
-          <input id="accent-color-input" type="color" value="#edf4ff" />
-        </label>
-        <label class="field">
-          <span>Background</span>
-          <select id="background-style-select">
-            <option value="aurora">Aurora</option>
-            <option value="midnight">Midnight</option>
-            <option value="sunrise">Sunrise</option>
-          </select>
-        </label>
-        <label class="field checkbox-field">
-          <input id="allow-guest-camera-view" type="checkbox" checked />
-          <span>Allow guests to view my camera</span>
-        </label>
-        <label class="field checkbox-field">
-          <input id="show-join-leave-messages" type="checkbox" checked />
-          <span>Show join and leave messages</span>
-        </label>
-        <div class="field">
-          <span>Blocked users</span>
-          <div id="blocked-users-list" class="blocked-users-list"></div>
-        </div>
-        <button type="submit">Save settings</button>
       </form>
     </div>
   </div>
