@@ -1464,6 +1464,9 @@
     if (!state.me) {
       return;
     }
+    if (elements.accountMenu.parentElement !== document.body) {
+      document.body.appendChild(elements.accountMenu);
+    }
     applyPreferences();
     positionAccountMenu();
     elements.accountMenu.classList.remove("hidden");
@@ -1483,6 +1486,19 @@
     elements.accountMenu.style.opacity = "";
     elements.accountMenu.style.pointerEvents = "";
     elements.accountBadge.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleAccountMenu(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    if (elements.accountMenu.classList.contains("hidden") || elements.accountMenu.hidden) {
+      openAccountMenu();
+    } else {
+      closeAccountMenu();
+    }
   }
 
   function openModal(overlay) {
@@ -2954,13 +2970,10 @@
     });
     elements.roomForm.addEventListener("submit", handleCreateRoom);
 
-    elements.accountBadge.addEventListener("click", function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (elements.accountMenu.classList.contains("hidden")) {
-        openAccountMenu();
-      } else {
-        closeAccountMenu();
+    elements.accountBadge.addEventListener("click", toggleAccountMenu);
+    elements.accountBadge.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        toggleAccountMenu(event);
       }
     });
     elements.accountMenuCloseBtn.addEventListener("click", function () {
