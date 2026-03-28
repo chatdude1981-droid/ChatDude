@@ -1279,11 +1279,29 @@
     };
   }
 
+  function positionPmInbox() {
+    const buttonRect = elements.openInboxBtn.getBoundingClientRect();
+    const panelWidth = Math.min(340, window.innerWidth - 24);
+    const left = Math.min(
+      Math.max(12, buttonRect.right - panelWidth),
+      Math.max(12, window.innerWidth - panelWidth - 12)
+    );
+    const top = Math.min(buttonRect.bottom + 10, Math.max(72, window.innerHeight - 160));
+
+    elements.pmInboxPopover.style.width = `${panelWidth}px`;
+    elements.pmInboxPopover.style.left = `${left}px`;
+    elements.pmInboxPopover.style.top = `${top}px`;
+    elements.pmInboxPopover.style.maxHeight = `${Math.max(180, window.innerHeight - top - 12)}px`;
+  }
+
   function openPmInbox() {
     state.pmInboxOpen = !state.pmInboxOpen;
     renderPmInbox();
     elements.pmInboxPopover.classList.toggle("hidden", !state.pmInboxOpen);
     elements.openInboxBtn.setAttribute("aria-expanded", state.pmInboxOpen ? "true" : "false");
+    if (state.pmInboxOpen) {
+      positionPmInbox();
+    }
   }
 
   function closePmInbox() {
@@ -2459,6 +2477,11 @@
     document.addEventListener("pointermove", handlePmWindowPointerMove);
     document.addEventListener("pointerup", handlePmWindowPointerUp);
     document.addEventListener("pointercancel", handlePmWindowPointerUp);
+    window.addEventListener("resize", function () {
+      if (state.pmInboxOpen) {
+        positionPmInbox();
+      }
+    });
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") {
         sendActivityPing(true);
