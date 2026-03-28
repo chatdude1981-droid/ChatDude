@@ -652,8 +652,7 @@ button:active {
   line-height: 1;
 }
 
-.call-fullscreen-btn svg,
-.call-resize-handle svg {
+.call-fullscreen-btn svg {
   width: 12px;
   height: 12px;
   stroke: currentColor;
@@ -750,31 +749,8 @@ button:active {
   opacity: 0;
 }
 
-.call-resize-handle {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(2, 6, 23, 0.72);
-  color: rgba(255, 255, 255, 0.62);
-  box-shadow: none;
-  z-index: 3;
-  cursor: nwse-resize;
-  touch-action: none;
-}
-
 .call-card {
   touch-action: none;
-}
-
-.call-resize-handle:hover {
-  box-shadow: none;
-  color: white;
 }
 
 .call-card:fullscreen,
@@ -815,9 +791,6 @@ button:active {
   right: 14px;
 }
 
-.call-card.is-maximized .call-resize-handle {
-  display: none;
-}
 
 .call-avatar {
   display: grid;

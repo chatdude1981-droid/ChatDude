@@ -605,14 +605,6 @@
         card.appendChild(controls);
       }
 
-      const resizeHandle = document.createElement("button");
-      resizeHandle.type = "button";
-      resizeHandle.className = "call-resize-handle";
-      resizeHandle.dataset.callResizeHandle = "true";
-      resizeHandle.setAttribute("aria-label", "Resize camera");
-      resizeHandle.title = "Resize camera";
-      resizeHandle.innerHTML = iconMarkup("resize");
-      card.appendChild(resizeHandle);
       elements.callParticipants.appendChild(card);
     });
   }
@@ -2240,19 +2232,18 @@
   }
 
   function handleCallPointerDown(event) {
-    const resizeHandle = event.target.closest("[data-call-resize-handle='true']");
     const handle = event.target.closest("[data-call-drag-handle='true']");
     const card = event.target.closest("[data-call-socket-id]");
     if (!card) {
       return;
     }
 
-    if (!resizeHandle && !handle && event.target.closest("button, input")) {
+    if (!handle && event.target.closest("button, input")) {
       return;
     }
 
-    const resizeEdges = resizeHandle ? { right: true, bottom: true, left: false, top: false } : getCallResizeEdges(card, event);
-    const resizeMode = resizeHandle || (!handle && hasResizeEdge(resizeEdges));
+    const resizeEdges = getCallResizeEdges(card, event);
+    const resizeMode = !handle && hasResizeEdge(resizeEdges);
     if (!resizeMode && !handle) {
       return;
     }
