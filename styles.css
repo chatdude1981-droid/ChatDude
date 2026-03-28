@@ -650,6 +650,17 @@ button:active {
   line-height: 1;
 }
 
+.call-fullscreen-btn svg,
+.call-resize-handle svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .call-fullscreen-btn:hover {
   box-shadow: none;
 }
@@ -739,23 +750,35 @@ button:active {
 
 .call-resize-handle {
   position: absolute;
-  right: 4px;
-  bottom: 2px;
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
+  right: 6px;
+  bottom: 6px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
   padding: 0;
-  border: none;
-  background: transparent;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(2, 6, 23, 0.72);
   color: rgba(255, 255, 255, 0.62);
   box-shadow: none;
   z-index: 3;
   cursor: nwse-resize;
+  touch-action: none;
 }
 
 .call-resize-handle:hover {
   box-shadow: none;
   color: white;
+}
+
+.call-card:fullscreen,
+.call-card:-webkit-full-screen,
+.call-card video:fullscreen,
+.call-card video:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  background: #000;
 }
 
 .call-avatar {
@@ -990,6 +1013,14 @@ button:active {
 }
 
 .user-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-name-trigger-wrap {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;

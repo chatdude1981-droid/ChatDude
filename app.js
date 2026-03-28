@@ -159,7 +159,9 @@
       camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l4.5-3v10L15 14"></path><rect x="3" y="6.5" width="12" height="11" rx="2"></rect></svg>',
       cameraOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16"></path><path d="M15 10l4.5-3v10L15 14"></path><path d="M10.5 6.5H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"></path></svg>',
       volume: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18 6a8.5 8.5 0 0 1 0 12"></path></svg>',
-      volumeOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"></path><path d="M16 9l5 5"></path><path d="M21 9l-5 5"></path></svg>'
+      volumeOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"></path><path d="M16 9l5 5"></path><path d="M21 9l-5 5"></path></svg>',
+      fullscreen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H4v4"></path><path d="M16 3h4v4"></path><path d="M20 16v4h-4"></path><path d="M8 21H4v-4"></path></svg>',
+      resize: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 15l6 6"></path><path d="M15 11l4 4"></path><path d="M6 18l1 1"></path></svg>'
     };
 
     return icons[name] || "";
@@ -478,6 +480,13 @@
       dragBar.innerHTML = `
         <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
         <div class="call-drag-actions">
+          <button
+            type="button"
+            class="call-fullscreen-btn"
+            data-call-fullscreen="${escapeHtml(participant.socketId)}"
+            aria-label="Fullscreen camera"
+            title="Fullscreen camera"
+          >${iconMarkup("fullscreen")}</button>
           ${participant.socketId === state.currentSocketId ? `
             <button
               type="button"
@@ -486,14 +495,15 @@
               aria-label="Close your camera"
               title="Stop publishing your camera"
             >X</button>
-          ` : ""}
-          <button
-            type="button"
-            class="call-fullscreen-btn"
-            data-call-fullscreen="${escapeHtml(participant.socketId)}"
-            aria-label="Fullscreen camera"
-            title="Fullscreen camera"
-          >[]</button>
+          ` : `
+            <button
+              type="button"
+              class="call-close-btn"
+              data-close-remote-camera="${escapeHtml(participant.socketId)}"
+              aria-label="Close this camera"
+              title="Close this camera"
+            >X</button>
+          `}
           <span class="call-drag-dot">::</span>
         </div>
       `;
@@ -576,7 +586,7 @@
       resizeHandle.dataset.callResizeHandle = "true";
       resizeHandle.setAttribute("aria-label", "Resize camera");
       resizeHandle.title = "Resize camera";
-      resizeHandle.textContent = "◢";
+      resizeHandle.innerHTML = iconMarkup("resize");
       card.appendChild(resizeHandle);
       elements.callParticipants.appendChild(card);
     });
@@ -716,42 +726,36 @@
               </span>
             </div>
           ` : `
-            <button
-              type="button"
-              class="user-name-trigger"
-              data-user-trigger="true"
-              data-socket-id="${escapeHtml(user.socketId)}"
-              data-username="${escapeHtml(user.username)}"
-            >
-              <span class="user-name-line" style="${escapeHtml(styleFromPreferences(user.preferences))}">
-                <strong>${escapeHtml(user.displayName || user.username)}</strong>
-                ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
-                ${user.isPublishing ? `
-                  <span class="user-cam-icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M15 10.5 19.5 7v10L15 13.5"></path>
-                      <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
-                    </svg>
-                  </span>
-                ` : ""}
-              </span>
-            </button>
+            <div class="user-name-trigger-wrap">
+              <button
+                type="button"
+                class="user-name-trigger"
+                data-user-trigger="true"
+                data-socket-id="${escapeHtml(user.socketId)}"
+                data-username="${escapeHtml(user.username)}"
+              >
+                <span class="user-name-line" style="${escapeHtml(styleFromPreferences(user.preferences))}">
+                  <strong>${escapeHtml(user.displayName || user.username)}</strong>
+                  ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
+                </span>
+              </button>
+              ${user.isPublishing ? `
+                <button
+                  type="button"
+                  class="user-cam-btn inline"
+                  data-open-media-id="${escapeHtml(user.socketId)}"
+                  ${!user.canViewCamera ? "disabled" : ""}
+                  title="Open ${escapeHtml(user.displayName || user.username)}'s camera"
+                  aria-label="Open ${escapeHtml(user.displayName || user.username)} camera"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                    <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                  </svg>
+                </button>
+              ` : ""}
+            </div>
           `}
-          ${user.isPublishing && !isSelf ? `
-            <button
-              type="button"
-              class="user-cam-btn"
-              data-open-media-id="${escapeHtml(user.socketId)}"
-              ${!user.canViewCamera ? "disabled" : ""}
-              title="Open ${escapeHtml(user.displayName || user.username)}'s camera"
-              aria-label="Open ${escapeHtml(user.displayName || user.username)} camera"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M15 10.5 19.5 7v10L15 13.5"></path>
-                <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
-              </svg>
-            </button>
-          ` : ""}
         </div>
       `;
       elements.usersList.appendChild(item);
@@ -2063,6 +2067,16 @@
     }
   }
 
+  function closePublishedMedia(socketId) {
+    if (!socketId || socketId === state.currentSocketId) {
+      return;
+    }
+
+    state.openMediaIds.delete(socketId);
+    closePeerConnection(socketId);
+    renderCallPanel();
+  }
+
   async function toggleBlockedUser() {
     if (!state.selectedUser || !state.me || state.me.isGuest) {
       return;
@@ -2159,6 +2173,7 @@
     };
 
     card.classList.add("is-dragging");
+    card.setPointerCapture?.(event.pointerId);
     event.preventDefault();
   }
 
@@ -2182,7 +2197,13 @@
         });
 
     state.callLayout[state.draggingCall.socketId] = nextLayout;
-    renderCallPanel();
+    const card = elements.callParticipants.querySelector(`[data-call-socket-id="${state.draggingCall.socketId}"]`);
+    if (card) {
+      card.style.left = `${nextLayout.x}px`;
+      card.style.top = `${nextLayout.y}px`;
+      card.style.width = `${nextLayout.width}px`;
+      card.style.height = `${nextLayout.height}px`;
+    }
   }
 
   function handleCallPointerUp(event) {
@@ -2193,9 +2214,11 @@
     const card = elements.callParticipants.querySelector(`[data-call-socket-id="${state.draggingCall.socketId}"]`);
     if (card) {
       card.classList.remove("is-dragging");
+      card.releasePointerCapture?.(event.pointerId);
     }
 
     state.draggingCall = null;
+    renderCallPanel();
   }
 
   function handlePmWindowPointerDown(event) {
@@ -2258,11 +2281,24 @@
         return;
       }
 
+      const closeRemoteButton = event.target.closest("[data-close-remote-camera]");
+      if (closeRemoteButton) {
+        closePublishedMedia(closeRemoteButton.dataset.closeRemoteCamera);
+        return;
+      }
+
       const fullscreenButton = event.target.closest("[data-call-fullscreen]");
       if (fullscreenButton) {
         const card = fullscreenButton.closest("[data-call-socket-id]");
-        if (card && card.requestFullscreen) {
-          card.requestFullscreen().catch(function () {
+        const target = card ? (card.querySelector("video") || card) : null;
+        const requestFullscreen = target && (
+          target.requestFullscreen ||
+          target.webkitRequestFullscreen ||
+          target.webkitEnterFullscreen ||
+          target.msRequestFullscreen
+        );
+        if (target && requestFullscreen) {
+          Promise.resolve(requestFullscreen.call(target)).catch(function () {
             showToast("Fullscreen was blocked by the browser.", "error");
           });
         }
