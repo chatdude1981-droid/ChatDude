@@ -13,6 +13,7 @@ const STORE_FILE = path.join(DATA_DIR, "store.json");
 const AUTH_SECRET = process.env.AUTH_SECRET || "chatdude-dev-secret-change-me";
 const MAX_ROOM_MESSAGES = 120;
 const MAX_PRIVATE_MESSAGES = 60;
+const PRESENCE_IDLE_MS = 1000 * 60 * 10;
 const DEFAULT_ROOMS = [
   {
     id: "room-general",
@@ -255,6 +256,30 @@ function sanitizeBlockedUsers(blockedUsers = []) {
   ));
 }
 
+function sanitizePresenceStatus(value) {
+  return ["online", "busy"].includes(value) ? value : "online";
+}
+
+function getEffectivePresenceStatus(session) {
+  if (!session) {
+    return "online";
+  }
+
+  if (Date.now() - Number(session.lastActiveAt || Date.now()) >= PRESENCE_IDLE_MS) {
+    return "idle";
+  }
+
+  return sanitizePresenceStatus(session.presenceStatus);
+}
+
+function touchSession(session) {
+  if (session) {
+    session.lastActiveAt = Date.now();
+  }
+
+  return session;
+}
+
 function toPublicUser(user) {
   return {
     id: user.id,
@@ -276,6 +301,8 @@ function serializeSession(session) {
     canCustomize: session.accountType === "registered",
     canCreateRooms: session.accountType === "registered",
     canPrivateMessage: session.accountType === "registered",
+    presenceStatus: sanitizePresenceStatus(session.presenceStatus),
+    effectivePresenceStatus: getEffectivePresenceStatus(session),
     preferences: sanitizePreferences(session.preferences || {}),
     blockedUsers: sanitizeBlockedUsers(session.blockedUsers || [])
   };
@@ -395,6 +422,8 @@ function getUsersInRoom(roomSlug, viewerSession) {
       displayName: session.displayName,
       accountType: session.accountType,
       isGuest: session.accountType === "guest",
+      presenceStatus: sanitizePresenceStatus(session.presenceStatus),
+      effectivePresenceStatus: getEffectivePresenceStatus(session),
       isPublishing: Boolean(session.isPublishing),
       cameraEnabled: Boolean(session.cameraEnabled),
       canViewCamera: Boolean(session.isPublishing && canViewerAccessPublisher(viewerSession, session)),
@@ -744,6 +773,8 @@ io.use((socket, next) => {
         preferences: sanitizePreferences(user.preferences || {}),
         blockedUsers: sanitizeBlockedUsers(user.blockedUsers || []),
         roomSlug: null,
+        presenceStatus: "online",
+        lastActiveAt: Date.now(),
         isPublishing: false,
         cameraEnabled: false,
         micEnabled: false
@@ -766,6 +797,8 @@ io.use((socket, next) => {
       preferences: sanitizePreferences({}),
       blockedUsers: [],
       roomSlug: null,
+      presenceStatus: "online",
+      lastActiveAt: Date.now(),
       isPublishing: false,
       cameraEnabled: false,
       micEnabled: false
@@ -796,6 +829,7 @@ io.on("connection", (socket) => {
 
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession) return;
+    touchSession(currentSession);
 
     const previousRoom = currentSession.roomSlug;
     if (previousRoom === room.slug) {
@@ -841,6 +875,7 @@ io.on("connection", (socket) => {
     const trimmed = String(message || "").trim();
 
     if (!currentSession || !currentSession.roomSlug || !trimmed) return;
+    touchSession(currentSession);
 
     const room = getRoomBySlug(currentSession.roomSlug);
     if (!room) return;
@@ -875,6 +910,7 @@ io.on("connection", (socket) => {
   socket.on("typing", ({ isTyping }) => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !currentSession.roomSlug) return;
+    touchSession(currentSession);
 
     currentSession.isTyping = Boolean(isTyping);
     onlineUsers.set(socket.id, currentSession);
@@ -893,6 +929,7 @@ io.on("connection", (socket) => {
     const trimmed = String(message || "").trim();
 
     if (!currentSession || !recipientSession || !trimmed) return;
+    touchSession(currentSession);
 
     if (sessionBlocksUsername(recipientSession, currentSession.username) || sessionBlocksUsername(currentSession, recipientSession.username)) {
       socket.emit("error message", "This user is not available for private messages.");
@@ -935,6 +972,7 @@ io.on("connection", (socket) => {
     if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
     if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
     if (!["audio", "video"].includes(mode)) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("pm media request", {
       fromSocketId: socket.id,
@@ -950,6 +988,7 @@ io.on("connection", (socket) => {
     if (!currentSession || !targetSession) return;
     if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
     if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("pm media accept", {
       fromSocketId: socket.id,
@@ -961,6 +1000,7 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("pm media decline", {
       fromSocketId: socket.id,
@@ -972,6 +1012,7 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("pm media end", {
       fromSocketId: socket.id
@@ -981,6 +1022,7 @@ io.on("connection", (socket) => {
   socket.on("start publishing", () => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !currentSession.roomSlug) return;
+    touchSession(currentSession);
 
     currentSession.isPublishing = true;
     currentSession.cameraEnabled = true;
@@ -993,6 +1035,7 @@ io.on("connection", (socket) => {
   socket.on("stop publishing", () => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !currentSession.roomSlug) return;
+    touchSession(currentSession);
 
     currentSession.isPublishing = false;
     currentSession.cameraEnabled = false;
@@ -1005,6 +1048,7 @@ io.on("connection", (socket) => {
   socket.on("update media status", ({ cameraEnabled, micEnabled }) => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !currentSession.roomSlug || !currentSession.isPublishing) return;
+    touchSession(currentSession);
 
     currentSession.cameraEnabled = Boolean(cameraEnabled);
     currentSession.micEnabled = Boolean(micEnabled);
@@ -1020,6 +1064,7 @@ io.on("connection", (socket) => {
     if (currentSession.roomSlug !== targetSession.roomSlug) return;
     if (!targetSession.isPublishing) return;
     if (!canViewerAccessPublisher(currentSession, targetSession)) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("media view requested", {
       viewerSocketId: socket.id,
@@ -1035,6 +1080,7 @@ io.on("connection", (socket) => {
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession || !description) return;
     if (currentSession.roomSlug !== targetSession.roomSlug) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("webrtc offer", {
       fromSocketId: socket.id,
@@ -1053,6 +1099,7 @@ io.on("connection", (socket) => {
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession || !description) return;
     if (currentSession.roomSlug !== targetSession.roomSlug) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("webrtc answer", {
       fromSocketId: socket.id,
@@ -1065,6 +1112,7 @@ io.on("connection", (socket) => {
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession || !candidate) return;
     if (currentSession.roomSlug !== targetSession.roomSlug) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("webrtc ice candidate", {
       fromSocketId: socket.id,
@@ -1078,6 +1126,7 @@ io.on("connection", (socket) => {
     if (!currentSession || !targetSession || !description) return;
     if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
     if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("pm webrtc offer", {
       fromSocketId: socket.id,
@@ -1094,6 +1143,7 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession || !description) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("pm webrtc answer", {
       fromSocketId: socket.id,
@@ -1105,11 +1155,40 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession || !candidate) return;
+    touchSession(currentSession);
 
     io.to(toSocketId).emit("pm webrtc ice candidate", {
       fromSocketId: socket.id,
       candidate
     });
+  });
+
+  socket.on("set presence status", ({ status }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    if (!currentSession) return;
+
+    currentSession.presenceStatus = sanitizePresenceStatus(status);
+    touchSession(currentSession);
+    onlineUsers.set(socket.id, currentSession);
+
+    if (currentSession.roomSlug) {
+      updateUserList(currentSession.roomSlug);
+    }
+
+    socket.emit("presence updated", serializeSession(currentSession));
+  });
+
+  socket.on("activity ping", () => {
+    const currentSession = onlineUsers.get(socket.id);
+    if (!currentSession) return;
+
+    const wasIdle = getEffectivePresenceStatus(currentSession) === "idle";
+    touchSession(currentSession);
+    onlineUsers.set(socket.id, currentSession);
+
+    if (wasIdle && currentSession.roomSlug) {
+      updateUserList(currentSession.roomSlug);
+    }
   });
 
   socket.on("delete message", ({ messageId }) => {
@@ -1147,6 +1226,18 @@ io.on("connection", (socket) => {
     emitRoomList();
   });
 });
+
+setInterval(() => {
+  const activeRooms = new Set(
+    Array.from(onlineUsers.values())
+      .map((session) => session.roomSlug)
+      .filter(Boolean)
+  );
+
+  activeRooms.forEach((roomSlug) => {
+    updateUserList(roomSlug);
+  });
+}, 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

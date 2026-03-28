@@ -335,6 +335,22 @@ button:active {
   position: relative;
 }
 
+.status-control {
+  display: grid;
+  gap: 4px;
+  min-width: 108px;
+}
+
+.status-control span {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.status-control select {
+  padding: 0.55rem 0.8rem;
+  border-radius: 14px;
+}
+
 .pm-inbox-wrap {
   position: relative;
 }
@@ -973,12 +989,33 @@ button:active {
   box-shadow: none;
 }
 
+.user-name-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-badge-text {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 .user-dot {
   width: 11px;
   height: 11px;
   border-radius: 999px;
   background: var(--success);
   box-shadow: 0 0 18px rgba(52, 211, 153, 0.45);
+}
+
+.user-dot.is-busy {
+  background: var(--warning);
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.45);
+}
+
+.user-dot.is-idle {
+  background: var(--muted);
+  box-shadow: 0 0 18px rgba(156, 174, 199, 0.35);
 }
 
 .typing-indicator {

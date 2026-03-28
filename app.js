@@ -39,6 +39,7 @@
     activePmUser: null,
     pmWindowPosition: { x: 96, y: 132 },
     draggingPmWindow: null,
+    lastActivityPingAt: 0,
     pmCall: {
       targetSocketId: "",
       targetUsername: "",
@@ -76,6 +77,7 @@
     openInboxBtn: document.getElementById("open-inbox-btn"),
     inboxCount: document.getElementById("inbox-count"),
     pmInboxPopover: document.getElementById("pm-inbox-popover"),
+    presenceStatusSelect: document.getElementById("presence-status-select"),
     openRoomModalBtn: document.getElementById("open-room-modal-btn"),
     deleteRoomBtn: document.getElementById("delete-room-btn"),
     openPreferencesInlineBtn: document.getElementById("open-preferences-inline-btn"),
@@ -314,6 +316,8 @@
       : "Publish your camera first";
     elements.pushToTalkBtn.textContent = state.micEnabled ? "Mute" : "Unmute";
     elements.pushToTalkBtn.classList.toggle("is-active", state.isPublishing && !state.micEnabled);
+    elements.presenceStatusSelect.value = state.me.presenceStatus || "online";
+    elements.presenceStatusSelect.disabled = !state.socket;
     renderPmInbox();
     renderPmWindow();
   }
@@ -432,7 +436,18 @@
 
     elements.callParticipants.innerHTML = "";
 
-    const visiblePublishers = state.mediaPublishers.filter(function (publisher) {
+    const allPublishers = state.mediaPublishers.slice();
+    if (state.isPublishing && !allPublishers.some(function (publisher) { return publisher.socketId === state.currentSocketId; })) {
+      allPublishers.unshift({
+        socketId: state.currentSocketId,
+        username: state.me?.username || "you",
+        displayName: state.me?.displayName || state.me?.username || "You",
+        cameraEnabled: state.cameraEnabled,
+        micEnabled: state.micEnabled
+      });
+    }
+
+    const visiblePublishers = allPublishers.filter(function (publisher) {
       return publisher.socketId === state.currentSocketId ||
         state.remoteStreams.has(publisher.socketId) ||
         state.openMediaIds.has(publisher.socketId);
@@ -657,7 +672,7 @@
 
       item.innerHTML = `
         <div class="user-row">
-          <span class="user-dot"></span>
+          <span class="user-dot is-${escapeHtml(user.effectivePresenceStatus || "online")}"></span>
           <button
             type="button"
             class="user-name-trigger"
@@ -665,12 +680,11 @@
             data-socket-id="${escapeHtml(user.socketId)}"
             data-username="${escapeHtml(user.username)}"
           >
-            <strong>${escapeHtml(user.displayName || user.username)}</strong>
-            <span class="pm-meta">${
-              user.isGuest
-                ? "Guest"
-                : verifiedBadgeMarkup()
-            }</span>
+            <span class="user-name-line">
+              <strong>${escapeHtml(user.displayName || user.username)}</strong>
+              ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
+            </span>
+            <span class="pm-meta">${escapeHtml(user.effectivePresenceStatus || "online")}</span>
           </button>
           ${user.isPublishing ? `
             <button
@@ -1154,6 +1168,20 @@
     overlay.classList.add("hidden");
   }
 
+  function sendActivityPing(force) {
+    const now = Date.now();
+    if (!state.socket) {
+      return;
+    }
+
+    if (!force && now - state.lastActivityPingAt < 20000) {
+      return;
+    }
+
+    state.lastActivityPingAt = now;
+    state.socket.emit("activity ping");
+  }
+
   function clampPmWindowPosition(position) {
     const maxX = Math.max(12, window.innerWidth - 430);
     const maxY = Math.max(80, window.innerHeight - 540);
@@ -1404,6 +1432,7 @@
     socket.on("session ready", function (payload) {
       state.currentSocketId = payload.socketId;
       state.me = payload.user;
+      state.lastActivityPingAt = 0;
       state.rooms = payload.rooms || state.rooms;
       applyPreferences();
       renderAccount();
@@ -1416,6 +1445,8 @@
       if (desiredRoom) {
         joinRoom(desiredRoom);
       }
+
+      sendActivityPing(true);
     });
 
     socket.on("room list", function (rooms) {
@@ -1490,6 +1521,12 @@
       if (!state.me) return;
       state.me.preferences = preferences;
       applyPreferences();
+    });
+
+    socket.on("presence updated", function (user) {
+      state.me = user;
+      renderAccount();
+      renderUsers();
     });
 
     socket.on("room removed", function (payload) {
@@ -2117,6 +2154,9 @@
     elements.registerForm.addEventListener("submit", handleRegister);
     elements.messageForm.addEventListener("submit", handleMessageSubmit);
     elements.messageInput.addEventListener("input", handleTypingInput);
+    elements.messageInput.addEventListener("input", function () {
+      sendActivityPing(false);
+    });
     elements.messages.addEventListener("click", handleMessageActions);
     elements.callParticipants.addEventListener("pointerdown", handleCallPointerDown);
     elements.pmWindow.addEventListener("pointerdown", handlePmWindowPointerDown);
@@ -2158,6 +2198,15 @@
     });
     elements.logoutBtn.addEventListener("click", function () {
       logout(true);
+    });
+    elements.presenceStatusSelect.addEventListener("change", function () {
+      if (!state.socket) {
+        return;
+      }
+
+      state.socket.emit("set presence status", {
+        status: elements.presenceStatusSelect.value
+      });
     });
     elements.openInboxBtn.addEventListener("click", function (event) {
       event.stopPropagation();
@@ -2237,9 +2286,11 @@
         return;
       }
       closePmInbox();
+      sendActivityPing(false);
     });
 
     document.addEventListener("keydown", function (event) {
+      sendActivityPing(false);
       if (event.key === "Escape") {
         closeUserMenu();
         closePmInbox();
@@ -2255,6 +2306,11 @@
     document.addEventListener("pointermove", handlePmWindowPointerMove);
     document.addEventListener("pointerup", handlePmWindowPointerUp);
     document.addEventListener("pointercancel", handlePmWindowPointerUp);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") {
+        sendActivityPing(true);
+      }
+    });
 
     elements.menuPmBtn.addEventListener("click", openPmModal);
     elements.menuBlockBtn.addEventListener("click", toggleBlockedUser);
