@@ -192,10 +192,6 @@
     let currentRoom = "";
     let currentSocketId = "";
 
-    socket.on("connect", function () {
-      currentSocketId = socket.id;
-    });
-
     joinForm.addEventListener("submit", function (e) {
       e.preventDefault();
 
@@ -208,10 +204,13 @@
       currentRoom = room;
 
       socket.emit("join room", { username, room });
+    });
 
+    socket.on("joined room", function (data) {
+      currentSocketId = data.socketId;
       joinSection.style.display = "none";
       chatContainer.style.display = "block";
-      roomLabel.textContent = `Room: ${room}`;
+      roomLabel.textContent = `Room: ${data.room}`;
     });
 
     form.addEventListener("submit", function (e) {

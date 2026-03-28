@@ -36,6 +36,12 @@ io.on("connection", (socket) => {
     socket.join(room);
     users[socket.id] = { username, room };
 
+    socket.emit("joined room", {
+      socketId: socket.id,
+      room,
+      username
+    });
+
     socket.to(room).emit("system message", `${username} joined the room`);
     updateUserList(room);
   });
