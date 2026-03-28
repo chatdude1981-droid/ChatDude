@@ -1646,10 +1646,6 @@
     });
 
     socket.on("webrtc offer", async function (payload) {
-      if (!state.localStream) {
-        return;
-      }
-
       const connection = createPeerConnection(payload.fromSocketId);
       await connection.setRemoteDescription(new RTCSessionDescription(payload.description));
       const answer = await connection.createAnswer();
