@@ -150,8 +150,26 @@
               <h3 id="room-title">Room</h3>
               <p id="room-description">Pick a room to start chatting.</p>
             </div>
-            <div id="typing-indicator" class="typing-indicator"></div>
+            <div class="header-side">
+              <div id="typing-indicator" class="typing-indicator"></div>
+              <div class="call-controls">
+                <button id="join-audio-btn" class="ghost-button hidden" type="button">Join Voice</button>
+                <button id="join-video-btn" class="ghost-button hidden" type="button">Join Video</button>
+                <button id="leave-call-btn" class="ghost-button hidden" type="button">Leave Call</button>
+              </div>
+            </div>
           </div>
+
+          <section id="call-panel" class="call-panel hidden">
+            <div class="call-panel-header">
+              <div>
+                <span class="eyebrow">Room Call</span>
+                <h4 id="call-status-title">Voice and video</h4>
+              </div>
+              <span id="call-status-note" class="subtle-copy">Registered users can join the room call.</span>
+            </div>
+            <div id="call-participants" class="call-participants"></div>
+          </section>
 
           <ul id="messages" class="messages"></ul>
 

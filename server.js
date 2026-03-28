@@ -349,12 +349,30 @@ function getUsersInRoom(roomSlug) {
     .sort((a, b) => a.username.localeCompare(b.username));
 }
 
+function getCallParticipants(roomSlug) {
+  return Array.from(onlineUsers.entries())
+    .filter(([, session]) => session.roomSlug === roomSlug && session.inCall)
+    .map(([socketId, session]) => ({
+      socketId,
+      username: session.username,
+      displayName: session.displayName,
+      mediaKind: session.mediaKind || "audio"
+    }));
+}
+
 function updateUserList(roomSlug) {
   io.to(roomSlug).emit("user list", getUsersInRoom(roomSlug));
 }
 
 function emitRoomList() {
   io.emit("room list", store.rooms.map(serializeRoom));
+}
+
+function emitCallState(roomSlug) {
+  io.to(roomSlug).emit("room call state", {
+    roomSlug,
+    participants: getCallParticipants(roomSlug)
+  });
 }
 
 function getRoomBySlug(roomSlug) {
@@ -603,7 +621,9 @@ io.use((socket, next) => {
         displayName: user.displayName,
         accountType: "registered",
         preferences: sanitizePreferences(user.preferences || {}),
-        roomSlug: null
+        roomSlug: null,
+        inCall: false,
+        mediaKind: null
       };
       next();
       return;
@@ -621,7 +641,9 @@ io.use((socket, next) => {
       displayName: guestName.slice(0, 20),
       accountType: "guest",
       preferences: sanitizePreferences({}),
-      roomSlug: null
+      roomSlug: null,
+      inCall: false,
+      mediaKind: null
     };
 
     next();
@@ -657,11 +679,15 @@ io.on("connection", (socket) => {
         messages: getRoomHistory(room.slug)
       });
       updateUserList(room.slug);
+      emitCallState(room.slug);
       return;
     }
 
     if (previousRoom) {
+      currentSession.inCall = false;
+      currentSession.mediaKind = null;
       socket.leave(previousRoom);
+      emitCallState(previousRoom);
     }
 
     socket.join(room.slug);
@@ -674,6 +700,7 @@ io.on("connection", (socket) => {
     });
 
     updateUserList(room.slug);
+    emitCallState(room.slug);
 
     if (previousRoom && previousRoom !== room.slug) {
       updateUserList(previousRoom);
@@ -767,6 +794,72 @@ io.on("connection", (socket) => {
     }, toSocketId));
   });
 
+  socket.on("join call", ({ mediaKind }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    if (!currentSession || !currentSession.roomSlug) return;
+
+    if (currentSession.accountType !== "registered") {
+      socket.emit("error message", "Voice and video are available for registered users.");
+      return;
+    }
+
+    currentSession.inCall = true;
+    currentSession.mediaKind = mediaKind === "video" ? "video" : "audio";
+    onlineUsers.set(socket.id, currentSession);
+    emitCallState(currentSession.roomSlug);
+  });
+
+  socket.on("leave call", () => {
+    const currentSession = onlineUsers.get(socket.id);
+    if (!currentSession || !currentSession.roomSlug) return;
+
+    currentSession.inCall = false;
+    currentSession.mediaKind = null;
+    onlineUsers.set(socket.id, currentSession);
+    emitCallState(currentSession.roomSlug);
+  });
+
+  socket.on("webrtc offer", ({ toSocketId, description }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession || !description) return;
+    if (currentSession.roomSlug !== targetSession.roomSlug) return;
+
+    io.to(toSocketId).emit("webrtc offer", {
+      fromSocketId: socket.id,
+      description,
+      user: {
+        username: currentSession.username,
+        displayName: currentSession.displayName,
+        mediaKind: currentSession.mediaKind || "audio"
+      }
+    });
+  });
+
+  socket.on("webrtc answer", ({ toSocketId, description }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession || !description) return;
+    if (currentSession.roomSlug !== targetSession.roomSlug) return;
+
+    io.to(toSocketId).emit("webrtc answer", {
+      fromSocketId: socket.id,
+      description
+    });
+  });
+
+  socket.on("webrtc ice candidate", ({ toSocketId, candidate }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession || !candidate) return;
+    if (currentSession.roomSlug !== targetSession.roomSlug) return;
+
+    io.to(toSocketId).emit("webrtc ice candidate", {
+      fromSocketId: socket.id,
+      candidate
+    });
+  });
+
   socket.on("delete message", ({ messageId }) => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !messageId) return;
@@ -796,6 +889,7 @@ io.on("connection", (socket) => {
     if (currentSession?.roomSlug) {
       createSystemMessage(currentSession.roomSlug, `${currentSession.username} left the room`);
       updateUserList(currentSession.roomSlug);
+      emitCallState(currentSession.roomSlug);
     }
 
     emitRoomList();

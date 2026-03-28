@@ -22,7 +22,12 @@
     selectedUser: null,
     activeTab: "guest",
     typingTimer: null,
-    isTyping: false
+    isTyping: false,
+    callParticipants: [],
+    localStream: null,
+    callMode: null,
+    peerConnections: new Map(),
+    remoteStreams: new Map()
   };
 
   const elements = {
@@ -50,6 +55,13 @@
     roomList: document.getElementById("room-list"),
     roomTitle: document.getElementById("room-title"),
     roomDescription: document.getElementById("room-description"),
+    callPanel: document.getElementById("call-panel"),
+    callStatusTitle: document.getElementById("call-status-title"),
+    callStatusNote: document.getElementById("call-status-note"),
+    callParticipants: document.getElementById("call-participants"),
+    joinAudioBtn: document.getElementById("join-audio-btn"),
+    joinVideoBtn: document.getElementById("join-video-btn"),
+    leaveCallBtn: document.getElementById("leave-call-btn"),
     messages: document.getElementById("messages"),
     messageForm: document.getElementById("message-form"),
     messageInput: document.getElementById("message-input"),
@@ -208,6 +220,10 @@
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
     elements.openPreferencesBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
+    const canUseCalls = Boolean(state.me && !state.me.isGuest && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
+    elements.joinAudioBtn.classList.toggle("hidden", !canUseCalls || Boolean(state.callMode));
+    elements.joinVideoBtn.classList.toggle("hidden", !canUseCalls || Boolean(state.callMode));
+    elements.leaveCallBtn.classList.toggle("hidden", !state.callMode);
   }
 
   function canManageActiveRoom() {
@@ -255,6 +271,90 @@
     }
 
     elements.deleteRoomBtn.classList.toggle("hidden", !canManageActiveRoom());
+  }
+
+  function initialFromName(name) {
+    return (name || "?").slice(0, 1).toUpperCase();
+  }
+
+  function renderCallPanel() {
+    const canUseCalls = Boolean(state.me && !state.me.isGuest && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
+    const roomHasParticipants = state.callParticipants.length > 0;
+    const shouldShowPanel = canUseCalls || roomHasParticipants;
+
+    elements.callPanel.classList.toggle("hidden", !shouldShowPanel);
+
+    if (!shouldShowPanel) {
+      return;
+    }
+
+    if (!canUseCalls) {
+      elements.callStatusTitle.textContent = "Voice and video";
+      elements.callStatusNote.textContent = state.me && state.me.isGuest
+        ? "Create an account to join room calls."
+        : "Your browser does not support room calls here.";
+    } else if (state.callMode) {
+      elements.callStatusTitle.textContent = state.callMode === "video" ? "Video call live" : "Voice call live";
+      elements.callStatusNote.textContent = `${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"} connected in this room.`;
+    } else {
+      elements.callStatusTitle.textContent = "Voice and video";
+      elements.callStatusNote.textContent = roomHasParticipants
+        ? `Join the live room call with ${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"}.`
+        : "Registered users can start a lightweight room call.";
+    }
+
+    elements.callParticipants.innerHTML = "";
+
+    if (!state.callParticipants.length) {
+      elements.callParticipants.innerHTML = '<div class="empty-state">No one is in the room call yet.</div>';
+      return;
+    }
+
+    state.callParticipants.forEach(function (participant) {
+      const card = document.createElement("article");
+      const remoteStream = state.remoteStreams.get(participant.socketId);
+      const isVideo = participant.mediaKind === "video" && remoteStream;
+      card.className = `call-card${isVideo ? "" : " is-audio-only"}`;
+
+      if (participant.socketId === state.currentSocketId && state.localStream) {
+        if (state.callMode === "video") {
+          const localVideo = document.createElement("video");
+          localVideo.autoplay = true;
+          localVideo.muted = true;
+          localVideo.playsInline = true;
+          localVideo.srcObject = state.localStream;
+          card.appendChild(localVideo);
+        } else {
+          const avatar = document.createElement("div");
+          avatar.className = "call-avatar";
+          avatar.textContent = initialFromName(participant.displayName || participant.username);
+          card.appendChild(avatar);
+        }
+      } else if (isVideo) {
+        const remoteVideo = document.createElement("video");
+        remoteVideo.autoplay = true;
+        remoteVideo.playsInline = true;
+        remoteVideo.srcObject = remoteStream;
+        card.appendChild(remoteVideo);
+      } else {
+        const avatar = document.createElement("div");
+        avatar.className = "call-avatar";
+        avatar.textContent = initialFromName(participant.displayName || participant.username);
+        card.appendChild(avatar);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "call-meta";
+      meta.innerHTML = `
+        <div>
+          <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
+          <div class="call-role">${escapeHtml(participant.socketId === state.currentSocketId ? "You" : participant.mediaKind === "video" ? "Video" : "Voice")}</div>
+        </div>
+        <span class="room-role-tag">${escapeHtml(participant.mediaKind === "video" ? "Cam" : "Mic")}</span>
+      `;
+      card.appendChild(meta);
+      elements.callParticipants.appendChild(card);
+    });
   }
 
   function canDeleteMessage(message) {
@@ -422,6 +522,172 @@
     elements.typingIndicator.textContent = `${state.typingUsers.slice(0, 2).join(" and ")} are typing...`;
   }
 
+  function getRtcConfig() {
+    return {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" }
+      ]
+    };
+  }
+
+  function closePeerConnection(socketId) {
+    const existing = state.peerConnections.get(socketId);
+    if (existing) {
+      existing.close();
+      state.peerConnections.delete(socketId);
+    }
+
+    state.remoteStreams.delete(socketId);
+  }
+
+  function cleanupCallState() {
+    Array.from(state.peerConnections.keys()).forEach(closePeerConnection);
+
+    if (state.localStream) {
+      state.localStream.getTracks().forEach(function (track) {
+        track.stop();
+      });
+      state.localStream = null;
+    }
+
+    state.callMode = null;
+    state.callParticipants = [];
+    renderAccount();
+    renderCallPanel();
+  }
+
+  function createPeerConnection(targetSocketId) {
+    const existing = state.peerConnections.get(targetSocketId);
+    if (existing) {
+      return existing;
+    }
+
+    const connection = new RTCPeerConnection(getRtcConfig());
+
+    if (state.localStream) {
+      state.localStream.getTracks().forEach(function (track) {
+        connection.addTrack(track, state.localStream);
+      });
+    }
+
+    connection.onicecandidate = function (event) {
+      if (event.candidate && state.socket) {
+        state.socket.emit("webrtc ice candidate", {
+          toSocketId: targetSocketId,
+          candidate: event.candidate
+        });
+      }
+    };
+
+    connection.ontrack = function (event) {
+      const stream = event.streams && event.streams[0]
+        ? event.streams[0]
+        : new MediaStream([event.track]);
+      state.remoteStreams.set(targetSocketId, stream);
+      renderCallPanel();
+    };
+
+    connection.onconnectionstatechange = function () {
+      if (["closed", "failed", "disconnected"].includes(connection.connectionState)) {
+        closePeerConnection(targetSocketId);
+        renderCallPanel();
+      }
+    };
+
+    state.peerConnections.set(targetSocketId, connection);
+    return connection;
+  }
+
+  async function createOfferForParticipant(targetSocketId) {
+    if (!state.localStream || !state.socket || targetSocketId === state.currentSocketId) {
+      return;
+    }
+
+    const connection = createPeerConnection(targetSocketId);
+    const offer = await connection.createOffer();
+    await connection.setLocalDescription(offer);
+    state.socket.emit("webrtc offer", {
+      toSocketId: targetSocketId,
+      description: connection.localDescription
+    });
+  }
+
+  async function syncPeerConnections() {
+    if (!state.callMode || !state.localStream) {
+      Array.from(state.peerConnections.keys()).forEach(closePeerConnection);
+      renderCallPanel();
+      return;
+    }
+
+    const participantIds = new Set(state.callParticipants.map(function (participant) {
+      return participant.socketId;
+    }));
+
+    Array.from(state.peerConnections.keys()).forEach(function (socketId) {
+      if (!participantIds.has(socketId)) {
+        closePeerConnection(socketId);
+      }
+    });
+
+    const others = state.callParticipants
+      .filter(function (participant) {
+        return participant.socketId !== state.currentSocketId;
+      })
+      .sort(function (a, b) {
+        return a.socketId.localeCompare(b.socketId);
+      });
+
+    for (const participant of others) {
+      if (state.currentSocketId.localeCompare(participant.socketId) < 0) {
+        await createOfferForParticipant(participant.socketId);
+      } else if (!state.peerConnections.has(participant.socketId)) {
+        createPeerConnection(participant.socketId);
+      }
+    }
+
+    renderCallPanel();
+  }
+
+  async function startCall(mode) {
+    if (!state.me || state.me.isGuest) {
+      showToast("Create an account to unlock voice and video.", "error");
+      return;
+    }
+
+    if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) {
+      showToast("This browser does not support WebRTC room calls here.", "error");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: mode === "video"
+      });
+
+      cleanupCallState();
+      state.localStream = stream;
+      state.callMode = mode;
+      renderAccount();
+      renderCallPanel();
+
+      if (state.socket) {
+        state.socket.emit("join call", { mediaKind: mode });
+      }
+    } catch (error) {
+      showToast("Microphone or camera access was denied.", "error");
+    }
+  }
+
+  function leaveCall(announce) {
+    if (announce !== false && state.socket && state.callMode) {
+      state.socket.emit("leave call");
+    }
+
+    cleanupCallState();
+  }
+
   function openUserMenu(socketId, username, clientX, clientY) {
     if (!socketId || socketId === state.currentSocketId) {
       return;
@@ -460,6 +726,7 @@
     renderUsers();
     renderPmFeed();
     renderTyping();
+    renderCallPanel();
     applyPreferences();
   }
 
@@ -471,6 +738,7 @@
 
   function connectSocket(authPayload) {
     if (state.socket) {
+      leaveCall(false);
       state.socket.disconnect();
       state.socket = null;
     }
@@ -509,6 +777,7 @@
       state.messages = payload.messages || [];
       renderRooms();
       renderMessages();
+      renderCallPanel();
     });
 
     socket.on("chat message", function (message) {
@@ -542,6 +811,17 @@
       renderTyping();
     });
 
+    socket.on("room call state", async function (payload) {
+      if (payload.roomSlug !== state.activeRoom) {
+        return;
+      }
+
+      state.callParticipants = Array.isArray(payload.participants) ? payload.participants : [];
+      await syncPeerConnections();
+      renderAccount();
+      renderCallPanel();
+    });
+
     socket.on("private message", function (payload) {
       state.pmFeed.push(payload);
       savePmFeed();
@@ -556,6 +836,7 @@
     });
 
     socket.on("room removed", function (payload) {
+      leaveCall(false);
       showToast("This room was removed.", "success");
       if (payload.fallbackRoom) {
         state.activeRoom = payload.fallbackRoom.slug;
@@ -563,6 +844,43 @@
       } else {
         state.messages = [];
         renderMessages();
+      }
+    });
+
+    socket.on("webrtc offer", async function (payload) {
+      if (!state.localStream) {
+        return;
+      }
+
+      const connection = createPeerConnection(payload.fromSocketId);
+      await connection.setRemoteDescription(new RTCSessionDescription(payload.description));
+      const answer = await connection.createAnswer();
+      await connection.setLocalDescription(answer);
+      socket.emit("webrtc answer", {
+        toSocketId: payload.fromSocketId,
+        description: connection.localDescription
+      });
+    });
+
+    socket.on("webrtc answer", async function (payload) {
+      const connection = state.peerConnections.get(payload.fromSocketId);
+      if (!connection) {
+        return;
+      }
+
+      await connection.setRemoteDescription(new RTCSessionDescription(payload.description));
+    });
+
+    socket.on("webrtc ice candidate", async function (payload) {
+      const connection = state.peerConnections.get(payload.fromSocketId);
+      if (!connection) {
+        return;
+      }
+
+      try {
+        await connection.addIceCandidate(new RTCIceCandidate(payload.candidate));
+      } catch (_error) {
+        showToast("A network candidate was skipped during call setup.", "error");
       }
     });
 
@@ -582,9 +900,14 @@
 
   function joinRoom(roomSlug) {
     if (!state.socket || !roomSlug) return;
+    if (state.callMode) {
+      leaveCall();
+    }
     state.activeRoom = roomSlug;
     localStorage.setItem(storageKeys.lastRoom, roomSlug);
     state.messages = [];
+    state.callParticipants = [];
+    renderCallPanel();
     renderRooms();
     renderMessages();
     state.socket.emit("join room", { roomSlug });
@@ -755,6 +1078,7 @@
   function logout(showMessage) {
     stopTyping();
     const wasGuest = Boolean(state.me && state.me.isGuest);
+    leaveCall(false);
 
     if (state.socket) {
       state.socket.disconnect();
@@ -869,6 +1193,15 @@
     elements.messages.addEventListener("click", handleMessageActions);
     elements.logoutBtn.addEventListener("click", function () {
       logout(true);
+    });
+    elements.joinAudioBtn.addEventListener("click", function () {
+      startCall("audio");
+    });
+    elements.joinVideoBtn.addEventListener("click", function () {
+      startCall("video");
+    });
+    elements.leaveCallBtn.addEventListener("click", function () {
+      leaveCall();
     });
     elements.deleteRoomBtn.addEventListener("click", handleDeleteRoom);
 
