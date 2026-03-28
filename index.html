@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat Room</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    #messages {
+      list-style: none;
+      padding: 0;
+      border: 1px solid #ccc;
+      height: 400px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+
+    #messages li {
+      padding: 8px 10px;
+      border-bottom: 1px solid #eee;
+    }
+
+    form {
+      display: flex;
+      gap: 10px;
+    }
+
+    input {
+      flex: 1;
+      padding: 10px;
+    }
+
+    button {
+      padding: 10px 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Chat Room</h1>
+
+  <ul id="messages"></ul>
+
+  <form id="form">
+    <input id="input" autocomplete="off" placeholder="Type a message..." />
+    <button type="submit">Send</button>
+  </form>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const form = document.getElementById("form");
+    const input = document.getElementById("input");
+    const messages = document.getElementById("messages");
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (input.value.trim()) {
+        socket.emit("chat message", input.value);
+        input.value = "";
+      }
+    });
+
+    socket.on("chat message", function (msg) {
+      const item = document.createElement("li");
+      item.textContent = msg;
+      messages.appendChild(item);
+      messages.scrollTop = messages.scrollHeight;
+    });
+  </script>
+</body>
+</html>
