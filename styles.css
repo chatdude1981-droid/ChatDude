@@ -1340,6 +1340,7 @@ body.has-split-call .chat-panel {
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 12px;
+  overflow: hidden;
   z-index: 1300;
 }
 
@@ -1469,6 +1470,21 @@ body.has-split-call .chat-panel {
   min-height: 72px;
   max-height: 140px;
   resize: vertical;
+}
+
+.pm-window-resize-handle {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, transparent 0 42%, rgba(255, 255, 255, 0.3) 42% 52%, transparent 52% 62%, rgba(255, 255, 255, 0.45) 62% 72%, transparent 72% 100%),
+    rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: nwse-resize;
+  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.24);
 }
 
 .color-row {

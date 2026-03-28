@@ -41,6 +41,8 @@
     activePmUser: null,
     pmWindowPosition: { x: 96, y: 132 },
     draggingPmWindow: null,
+    pmWindowSize: { width: 420, height: 540 },
+    resizingPmWindow: null,
     lastActivityPingAt: 0,
     pmCall: {
       targetSocketId: "",
@@ -60,6 +62,8 @@
   const CALL_CARD_ASPECT_RATIO = CALL_CARD_WIDTH / CALL_CARD_HEIGHT;
   const CALL_CARD_MIN_HEIGHT = Math.round(CALL_CARD_MIN_WIDTH / CALL_CARD_ASPECT_RATIO);
   const CALL_EDGE_RESIZE_THRESHOLD = 10;
+  const PM_WINDOW_MIN_WIDTH = 360;
+  const PM_WINDOW_MIN_HEIGHT = 420;
 
   const elements = {
     authShell: document.getElementById("auth-shell"),
@@ -1206,8 +1210,12 @@
       return;
     }
 
+    state.pmWindowSize = clampPmWindowSize(state.pmWindowSize);
+    state.pmWindowPosition = clampPmWindowPosition(state.pmWindowPosition, state.pmWindowSize);
     elements.pmWindow.style.left = `${state.pmWindowPosition.x}px`;
     elements.pmWindow.style.top = `${state.pmWindowPosition.y}px`;
+    elements.pmWindow.style.width = `${state.pmWindowSize.width}px`;
+    elements.pmWindow.style.height = `${state.pmWindowSize.height}px`;
     elements.pmWindowTitle.textContent = state.activePmUser.label || state.activePmUser.username;
 
     const targetUser = getConversationTarget(state.activePmUser.username);
@@ -1523,9 +1531,22 @@
     state.socket.emit("activity ping");
   }
 
-  function clampPmWindowPosition(position) {
-    const maxX = Math.max(12, window.innerWidth - 430);
-    const maxY = Math.max(80, window.innerHeight - 540);
+  function clampPmWindowSize(size) {
+    const maxWidth = Math.max(280, window.innerWidth - 24);
+    const maxHeight = Math.max(320, window.innerHeight - 96);
+    const minWidth = Math.min(PM_WINDOW_MIN_WIDTH, maxWidth);
+    const minHeight = Math.min(PM_WINDOW_MIN_HEIGHT, maxHeight);
+
+    return {
+      width: Math.min(Math.max(size.width, minWidth), maxWidth),
+      height: Math.min(Math.max(size.height, minHeight), maxHeight)
+    };
+  }
+
+  function clampPmWindowPosition(position, size) {
+    const appliedSize = size || state.pmWindowSize;
+    const maxX = Math.max(12, window.innerWidth - appliedSize.width - 12);
+    const maxY = Math.max(80, window.innerHeight - appliedSize.height - 12);
 
     return {
       x: Math.min(Math.max(position.x, 12), maxX),
@@ -2650,6 +2671,19 @@
   }
 
   function handlePmWindowPointerDown(event) {
+    const resizeHandle = event.target.closest("[data-pm-resize-handle='true']");
+    if (resizeHandle) {
+      state.resizingPmWindow = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originWidth: state.pmWindowSize.width,
+        originHeight: state.pmWindowSize.height
+      };
+      event.preventDefault();
+      return;
+    }
+
     const handle = event.target.closest("[data-pm-drag-handle='true']");
     if (!handle) {
       return;
@@ -2666,6 +2700,16 @@
   }
 
   function handlePmWindowPointerMove(event) {
+    if (state.resizingPmWindow && state.resizingPmWindow.pointerId === event.pointerId) {
+      state.pmWindowSize = clampPmWindowSize({
+        width: state.resizingPmWindow.originWidth + (event.clientX - state.resizingPmWindow.startX),
+        height: state.resizingPmWindow.originHeight + (event.clientY - state.resizingPmWindow.startY)
+      });
+      state.pmWindowPosition = clampPmWindowPosition(state.pmWindowPosition, state.pmWindowSize);
+      renderPmWindow();
+      return;
+    }
+
     if (!state.draggingPmWindow || state.draggingPmWindow.pointerId !== event.pointerId) {
       return;
     }
@@ -2673,11 +2717,16 @@
     state.pmWindowPosition = clampPmWindowPosition({
       x: state.draggingPmWindow.originX + (event.clientX - state.draggingPmWindow.startX),
       y: state.draggingPmWindow.originY + (event.clientY - state.draggingPmWindow.startY)
-    });
+    }, state.pmWindowSize);
     renderPmWindow();
   }
 
   function handlePmWindowPointerUp(event) {
+    if (state.resizingPmWindow && state.resizingPmWindow.pointerId === event.pointerId) {
+      state.resizingPmWindow = null;
+      return;
+    }
+
     if (!state.draggingPmWindow || state.draggingPmWindow.pointerId !== event.pointerId) {
       return;
     }
@@ -2901,6 +2950,9 @@
       if (state.pmInboxOpen) {
         positionPmInbox();
       }
+      state.pmWindowSize = clampPmWindowSize(state.pmWindowSize);
+      state.pmWindowPosition = clampPmWindowPosition(state.pmWindowPosition, state.pmWindowSize);
+      renderPmWindow();
       if (!elements.accountMenu.classList.contains("hidden")) {
         positionAccountMenu();
       }
