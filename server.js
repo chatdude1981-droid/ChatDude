@@ -344,19 +344,22 @@ function getUsersInRoom(roomSlug) {
       username: session.username,
       displayName: session.displayName,
       accountType: session.accountType,
-      isGuest: session.accountType === "guest"
+      isGuest: session.accountType === "guest",
+      isPublishing: Boolean(session.isPublishing),
+      cameraEnabled: Boolean(session.cameraEnabled)
     }))
     .sort((a, b) => a.username.localeCompare(b.username));
 }
 
-function getCallParticipants(roomSlug) {
+function getPublishedMediaInRoom(roomSlug) {
   return Array.from(onlineUsers.entries())
-    .filter(([, session]) => session.roomSlug === roomSlug && session.inCall)
+    .filter(([, session]) => session.roomSlug === roomSlug && session.isPublishing)
     .map(([socketId, session]) => ({
       socketId,
       username: session.username,
       displayName: session.displayName,
-      mediaKind: session.mediaKind || "audio"
+      cameraEnabled: Boolean(session.cameraEnabled),
+      micEnabled: Boolean(session.micEnabled)
     }));
 }
 
@@ -368,10 +371,10 @@ function emitRoomList() {
   io.emit("room list", store.rooms.map(serializeRoom));
 }
 
-function emitCallState(roomSlug) {
-  io.to(roomSlug).emit("room call state", {
+function emitMediaState(roomSlug) {
+  io.to(roomSlug).emit("room media state", {
     roomSlug,
-    participants: getCallParticipants(roomSlug)
+    publishers: getPublishedMediaInRoom(roomSlug)
   });
 }
 
@@ -622,8 +625,9 @@ io.use((socket, next) => {
         accountType: "registered",
         preferences: sanitizePreferences(user.preferences || {}),
         roomSlug: null,
-        inCall: false,
-        mediaKind: null
+        isPublishing: false,
+        cameraEnabled: false,
+        micEnabled: false
       };
       next();
       return;
@@ -642,8 +646,9 @@ io.use((socket, next) => {
       accountType: "guest",
       preferences: sanitizePreferences({}),
       roomSlug: null,
-      inCall: false,
-      mediaKind: null
+      isPublishing: false,
+      cameraEnabled: false,
+      micEnabled: false
     };
 
     next();
@@ -679,15 +684,16 @@ io.on("connection", (socket) => {
         messages: getRoomHistory(room.slug)
       });
       updateUserList(room.slug);
-      emitCallState(room.slug);
+      emitMediaState(room.slug);
       return;
     }
 
     if (previousRoom) {
-      currentSession.inCall = false;
-      currentSession.mediaKind = null;
+      currentSession.isPublishing = false;
+      currentSession.cameraEnabled = false;
+      currentSession.micEnabled = false;
       socket.leave(previousRoom);
-      emitCallState(previousRoom);
+      emitMediaState(previousRoom);
     }
 
     socket.join(room.slug);
@@ -700,7 +706,7 @@ io.on("connection", (socket) => {
     });
 
     updateUserList(room.slug);
-    emitCallState(room.slug);
+    emitMediaState(room.slug);
 
     if (previousRoom && previousRoom !== room.slug) {
       updateUserList(previousRoom);
@@ -794,29 +800,60 @@ io.on("connection", (socket) => {
     }, toSocketId));
   });
 
-  socket.on("join call", ({ mediaKind }) => {
+  socket.on("start publishing", () => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !currentSession.roomSlug) return;
 
     if (currentSession.accountType !== "registered") {
-      socket.emit("error message", "Voice and video are available for registered users.");
+      socket.emit("error message", "Camera publishing is available for registered users.");
       return;
     }
 
-    currentSession.inCall = true;
-    currentSession.mediaKind = mediaKind === "video" ? "video" : "audio";
+    currentSession.isPublishing = true;
+    currentSession.cameraEnabled = true;
+    currentSession.micEnabled = true;
     onlineUsers.set(socket.id, currentSession);
-    emitCallState(currentSession.roomSlug);
+    updateUserList(currentSession.roomSlug);
+    emitMediaState(currentSession.roomSlug);
   });
 
-  socket.on("leave call", () => {
+  socket.on("stop publishing", () => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !currentSession.roomSlug) return;
 
-    currentSession.inCall = false;
-    currentSession.mediaKind = null;
+    currentSession.isPublishing = false;
+    currentSession.cameraEnabled = false;
+    currentSession.micEnabled = false;
     onlineUsers.set(socket.id, currentSession);
-    emitCallState(currentSession.roomSlug);
+    updateUserList(currentSession.roomSlug);
+    emitMediaState(currentSession.roomSlug);
+  });
+
+  socket.on("update media status", ({ cameraEnabled, micEnabled }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    if (!currentSession || !currentSession.roomSlug || !currentSession.isPublishing) return;
+
+    currentSession.cameraEnabled = Boolean(cameraEnabled);
+    currentSession.micEnabled = Boolean(micEnabled);
+    onlineUsers.set(socket.id, currentSession);
+    updateUserList(currentSession.roomSlug);
+    emitMediaState(currentSession.roomSlug);
+  });
+
+  socket.on("request media view", ({ toSocketId }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession) return;
+    if (currentSession.roomSlug !== targetSession.roomSlug) return;
+    if (!targetSession.isPublishing) return;
+
+    io.to(toSocketId).emit("media view requested", {
+      viewerSocketId: socket.id,
+      viewer: {
+        username: currentSession.username,
+        displayName: currentSession.displayName
+      }
+    });
   });
 
   socket.on("webrtc offer", ({ toSocketId, description }) => {
@@ -831,7 +868,8 @@ io.on("connection", (socket) => {
       user: {
         username: currentSession.username,
         displayName: currentSession.displayName,
-        mediaKind: currentSession.mediaKind || "audio"
+        cameraEnabled: Boolean(currentSession.cameraEnabled),
+        micEnabled: Boolean(currentSession.micEnabled)
       }
     });
   });
@@ -889,7 +927,7 @@ io.on("connection", (socket) => {
     if (currentSession?.roomSlug) {
       createSystemMessage(currentSession.roomSlug, `${currentSession.username} left the room`);
       updateUserList(currentSession.roomSlug);
-      emitCallState(currentSession.roomSlug);
+      emitMediaState(currentSession.roomSlug);
     }
 
     emitRoomList();

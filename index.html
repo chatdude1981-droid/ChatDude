@@ -130,92 +130,85 @@
       </header>
 
       <div class="app-grid">
-        <aside class="room-rail card">
-          <div class="panel-heading">
-            <div>
-              <h3>Rooms</h3>
-              <p>Hop between public spaces and keep the flow moving.</p>
+        <section class="workspace">
+          <section id="media-panel" class="media-panel card">
+            <div class="media-panel-header">
+              <div>
+                <span class="eyebrow">Live Cameras</span>
+                <h4 id="call-status-title">Published cameras</h4>
+              </div>
+              <span id="call-status-note" class="subtle-copy">Turn on your camera to publish it to the room.</span>
             </div>
-          </div>
-          <div id="room-list" class="room-list"></div>
-          <div id="guest-upgrade-card" class="upgrade-card hidden">
-            <strong>Unlock the full toolkit</strong>
-            <span>Create an account for saved themes, DMs, and custom rooms.</span>
-          </div>
-        </aside>
+            <div id="call-participants" class="call-participants"></div>
+          </section>
 
-        <section id="call-panel" class="call-panel card">
-          <div class="call-panel-header">
-            <div>
-              <span class="eyebrow">Room Call</span>
-              <h4 id="call-status-title">Voice and video</h4>
+          <main class="chat-panel card">
+            <div class="chat-panel-header">
+              <div>
+                <h3 id="room-title">Room</h3>
+                <p id="room-description">Pick a room to start chatting.</p>
+              </div>
+              <div class="header-side">
+                <div id="typing-indicator" class="typing-indicator"></div>
+              </div>
             </div>
-            <span id="call-status-note" class="subtle-copy">Registered users can join the room call.</span>
-          </div>
-          <div id="call-participants" class="call-participants"></div>
+
+            <ul id="messages" class="messages"></ul>
+
+            <form id="message-form" class="composer">
+              <div class="composer-tools composer-tools-left">
+                <button id="join-audio-btn" class="ghost-button icon-control" type="button" aria-label="Publish camera" title="Publish camera">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                    <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                  </svg>
+                </button>
+                <button id="leave-call-btn" class="ghost-button icon-control" type="button" aria-label="Stop publishing" title="Stop publishing">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 4 20 20"></path>
+                    <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                    <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                  </svg>
+                </button>
+              </div>
+              <input
+                id="message-input"
+                autocomplete="off"
+                maxlength="600"
+                placeholder="Type a message for the room..."
+              />
+              <div class="composer-tools composer-tools-right">
+                <button id="push-to-talk-btn" class="ghost-button push-to-talk-btn" type="button" aria-label="Mute or unmute microphone" title="Mute or unmute microphone">
+                  Mute
+                </button>
+                <button id="send-message-btn" type="submit">Send</button>
+              </div>
+            </form>
+          </main>
         </section>
-
-        <main class="chat-panel card">
-          <div class="chat-panel-header">
-            <div>
-              <h3 id="room-title">Room</h3>
-              <p id="room-description">Pick a room to start chatting.</p>
-            </div>
-            <div class="header-side">
-              <div id="typing-indicator" class="typing-indicator"></div>
-            </div>
-          </div>
-
-          <ul id="messages" class="messages"></ul>
-
-          <form id="message-form" class="composer">
-            <div class="composer-tools composer-tools-left">
-              <button id="join-audio-btn" class="ghost-button icon-control" type="button" aria-label="Join voice" title="Join voice">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"></path>
-                  <path d="M18 12a6 6 0 0 1-12 0"></path>
-                  <path d="M12 18v3"></path>
-                  <path d="M8 21h8"></path>
-                </svg>
-              </button>
-              <button id="join-video-btn" class="ghost-button icon-control" type="button" aria-label="Join video" title="Join video">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M15 10.5 19.5 7v10L15 13.5"></path>
-                  <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
-                </svg>
-              </button>
-              <button id="leave-call-btn" class="ghost-button icon-control" type="button" aria-label="Leave call" title="Leave call">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4.5 15.5c2.2-2 4.8-3 7.5-3s5.3 1 7.5 3"></path>
-                  <path d="M9 15.5v2.5"></path>
-                  <path d="M15 15.5v2.5"></path>
-                </svg>
-              </button>
-            </div>
-            <input
-              id="message-input"
-              autocomplete="off"
-              maxlength="600"
-              placeholder="Type a message for the room..."
-            />
-            <div class="composer-tools composer-tools-right">
-              <button id="push-to-talk-btn" class="ghost-button push-to-talk-btn" type="button" aria-label="Hold to talk" title="Hold to talk">
-                Hold to Talk
-              </button>
-              <button id="send-message-btn" type="submit">Send</button>
-            </div>
-          </form>
-        </main>
 
         <aside class="side-panel">
           <section class="card people-panel">
             <div class="panel-heading">
               <div>
-                <h3>Online now</h3>
-                <p>Tap a person to open actions.</p>
+                <h3>Room Sidebar</h3>
+                <p>Users first, rooms second.</p>
               </div>
             </div>
-            <ul id="users-list" class="users-list"></ul>
+            <div class="tab-strip sidebar-tabs" id="sidebar-tabs">
+              <button class="tab-button is-active" data-sidebar-tab="users" type="button">Users</button>
+              <button class="tab-button" data-sidebar-tab="rooms" type="button">Rooms</button>
+            </div>
+            <div class="sidebar-tab-panel is-active" data-sidebar-panel="users">
+              <ul id="users-list" class="users-list"></ul>
+            </div>
+            <div class="sidebar-tab-panel" data-sidebar-panel="rooms">
+              <div id="room-list" class="room-list"></div>
+              <div id="guest-upgrade-card" class="upgrade-card hidden">
+                <strong>Unlock the full toolkit</strong>
+                <span>Create an account for saved themes, DMs, and custom rooms.</span>
+              </div>
+            </div>
           </section>
 
           <section class="card inbox-panel">

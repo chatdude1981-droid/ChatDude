@@ -23,14 +23,16 @@
     activeTab: "guest",
     typingTimer: null,
     isTyping: false,
-    callParticipants: [],
+    mediaPublishers: [],
     localStream: null,
-    callMode: null,
+    isPublishing: false,
+    cameraEnabled: false,
+    micEnabled: false,
     peerConnections: new Map(),
     remoteStreams: new Map(),
+    openMediaIds: new Set(),
     callLayout: {},
-    draggingCall: null,
-    pushToTalkActive: false
+    draggingCall: null
   };
 
   const elements = {
@@ -58,12 +60,11 @@
     roomList: document.getElementById("room-list"),
     roomTitle: document.getElementById("room-title"),
     roomDescription: document.getElementById("room-description"),
-    callPanel: document.getElementById("call-panel"),
+    callPanel: document.getElementById("media-panel"),
     callStatusTitle: document.getElementById("call-status-title"),
     callStatusNote: document.getElementById("call-status-note"),
     callParticipants: document.getElementById("call-participants"),
     joinAudioBtn: document.getElementById("join-audio-btn"),
-    joinVideoBtn: document.getElementById("join-video-btn"),
     leaveCallBtn: document.getElementById("leave-call-btn"),
     pushToTalkBtn: document.getElementById("push-to-talk-btn"),
     messages: document.getElementById("messages"),
@@ -224,14 +225,20 @@
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
     elements.openPreferencesBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
-    elements.joinAudioBtn.disabled = Boolean(state.callMode);
-    elements.joinVideoBtn.disabled = Boolean(state.callMode);
-    elements.leaveCallBtn.disabled = !state.callMode;
-    elements.joinAudioBtn.title = state.callMode ? "Already in a call" : "Join voice call";
-    elements.joinVideoBtn.title = state.callMode ? "Already in a call" : "Join video call";
-    elements.leaveCallBtn.title = state.callMode ? "Leave call" : "Not in a call";
-    elements.pushToTalkBtn.disabled = !state.callMode;
-    elements.pushToTalkBtn.title = state.callMode ? "Hold to talk" : "Join a call first";
+    elements.joinAudioBtn.disabled = state.me.isGuest || state.isPublishing;
+    elements.leaveCallBtn.disabled = !state.isPublishing;
+    elements.joinAudioBtn.title = state.me.isGuest
+      ? "Create an account to publish your camera"
+      : state.isPublishing
+        ? "Your camera is already published"
+        : "Publish your camera";
+    elements.leaveCallBtn.title = state.isPublishing ? "Stop publishing your camera" : "Your camera is not published";
+    elements.pushToTalkBtn.disabled = !state.isPublishing;
+    elements.pushToTalkBtn.title = state.isPublishing
+      ? (state.micEnabled ? "Mute your microphone" : "Unmute your microphone")
+      : "Publish your camera first";
+    elements.pushToTalkBtn.textContent = state.micEnabled ? "Mute" : "Unmute";
+    elements.pushToTalkBtn.classList.toggle("is-active", state.isPublishing && !state.micEnabled);
   }
 
   function canManageActiveRoom() {
@@ -317,56 +324,52 @@
     elements.pushToTalkBtn.classList.toggle("is-active", enabled);
   }
 
-  function canUsePushToTalk(eventTarget) {
-    if (!state.callMode || !state.localStream) {
-      return false;
-    }
-
-    if (!eventTarget || !(eventTarget instanceof Element)) {
-      return true;
-    }
-
-    return !eventTarget.closest("input, textarea, select, button");
-  }
-
   function renderCallPanel() {
     const canUseCalls = Boolean(state.me && !state.me.isGuest && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
-    const roomHasParticipants = state.callParticipants.length > 0;
+    const roomHasParticipants = state.mediaPublishers.length > 0;
     const browserSupportsCalls = Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
 
     if (!canUseCalls) {
-      elements.callStatusTitle.textContent = "Voice and video";
+      elements.callStatusTitle.textContent = "Published cameras";
       elements.callStatusNote.textContent = !browserSupportsCalls
-        ? "Your browser does not support room calls here."
+        ? "Your browser does not support published cameras here."
         : state.me && state.me.isGuest
-          ? "Create an account to join room calls."
-          : "Sign in to use room calls.";
-    } else if (state.callMode) {
-      elements.callStatusTitle.textContent = state.callMode === "video" ? "Video call live" : "Voice call live";
-      elements.callStatusNote.textContent = `${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"} connected. Hold the talk button or Alt to use your mic and drag title bars to move tiles.`;
+          ? "Create an account to publish your camera."
+          : "Sign in to use published cameras.";
+    } else if (state.isPublishing) {
+      elements.callStatusTitle.textContent = "Camera published";
+      elements.callStatusNote.textContent = `${state.mediaPublishers.length} published camera${state.mediaPublishers.length === 1 ? "" : "s"} in this room. Drag title bars to move windows.`;
     } else {
-      elements.callStatusTitle.textContent = "Voice and video";
+      elements.callStatusTitle.textContent = "Published cameras";
       elements.callStatusNote.textContent = roomHasParticipants
-        ? `Join the live room call with ${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"}.`
-        : "Registered users can start a lightweight room call.";
+        ? `Click a camera icon in the user list to open any of the ${state.mediaPublishers.length} published camera${state.mediaPublishers.length === 1 ? "" : "s"}.`
+        : "Publish your camera or open someone else's from the user list.";
     }
 
     elements.callParticipants.innerHTML = "";
 
-    if (!state.callParticipants.length) {
-      elements.callParticipants.innerHTML = '<div class="empty-state">No one is in the room call yet.</div>';
+    const visiblePublishers = state.mediaPublishers.filter(function (publisher) {
+      return publisher.socketId === state.currentSocketId ||
+        state.remoteStreams.has(publisher.socketId) ||
+        state.openMediaIds.has(publisher.socketId);
+    });
+
+    if (!visiblePublishers.length) {
+      elements.callParticipants.innerHTML = '<div class="empty-state">No camera windows are open. Use the camera icon in the user list to open one.</div>';
       return;
     }
 
-    state.callParticipants.forEach(function (participant) {
+    visiblePublishers.forEach(function (participant) {
       const card = document.createElement("article");
       const remoteStream = state.remoteStreams.get(participant.socketId);
-      const isVideo = participant.mediaKind === "video" && remoteStream;
-      card.className = `call-card${isVideo ? "" : " is-audio-only"}`;
+      const showVideo = participant.socketId === state.currentSocketId
+        ? Boolean(state.localStream && state.cameraEnabled)
+        : Boolean(remoteStream && participant.cameraEnabled);
+      card.className = `call-card${showVideo ? "" : " is-audio-only is-camera-off"}`;
       card.dataset.callSocketId = participant.socketId;
 
       const position = clampCallPosition(
-        state.callLayout[participant.socketId] || getDefaultCallPosition(state.callParticipants.indexOf(participant))
+        state.callLayout[participant.socketId] || getDefaultCallPosition(visiblePublishers.indexOf(participant))
       );
       state.callLayout[participant.socketId] = position;
       card.style.left = `${position.x}px`;
@@ -382,7 +385,7 @@
       card.appendChild(dragBar);
 
       if (participant.socketId === state.currentSocketId && state.localStream) {
-        if (state.callMode === "video") {
+        if (state.cameraEnabled) {
           const localVideo = document.createElement("video");
           localVideo.autoplay = true;
           localVideo.muted = true;
@@ -408,14 +411,28 @@
         card.appendChild(avatar);
       }
 
+      if (participant.socketId === state.currentSocketId && state.isPublishing) {
+        const controls = document.createElement("div");
+        controls.className = "camera-controls";
+        controls.innerHTML = `
+          <button type="button" class="camera-status-btn" data-toggle-mic="true">
+            ${state.micEnabled ? "Mute" : "Unmute"}
+          </button>
+          <button type="button" class="camera-status-btn" data-toggle-camera="true">
+            ${state.cameraEnabled ? "Hide Cam" : "Show Cam"}
+          </button>
+        `;
+        card.appendChild(controls);
+      }
+
       const meta = document.createElement("div");
       meta.className = "call-meta";
       meta.innerHTML = `
         <div>
           <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
-          <div class="call-role">${escapeHtml(participant.socketId === state.currentSocketId ? "You" : participant.mediaKind === "video" ? "Video" : "Voice")}</div>
+          <div class="call-role">${escapeHtml(participant.socketId === state.currentSocketId ? "You" : participant.cameraEnabled ? "Camera Live" : "Camera Hidden")}</div>
         </div>
-        <span class="room-role-tag">${escapeHtml(participant.mediaKind === "video" ? "Cam" : "Mic")}</span>
+        <span class="room-role-tag">${escapeHtml(participant.micEnabled ? "Mic On" : "Mic Off")}</span>
       `;
       card.appendChild(meta);
       elements.callParticipants.appendChild(card);
@@ -527,21 +544,35 @@
       const item = document.createElement("li");
       item.className = "user-item";
 
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "user-row";
-      button.dataset.userTrigger = "true";
-      button.dataset.socketId = user.socketId;
-      button.dataset.username = user.username;
-      button.innerHTML = `
-        <span class="user-dot"></span>
-        <span>
-          <strong>${escapeHtml(user.displayName || user.username)}</strong>
-          <span class="pm-meta">${escapeHtml(user.isGuest ? "Guest" : "Registered")}</span>
-        </span>
+      item.innerHTML = `
+        <div class="user-row">
+          <span class="user-dot"></span>
+          <button
+            type="button"
+            class="user-name-trigger"
+            data-user-trigger="true"
+            data-socket-id="${escapeHtml(user.socketId)}"
+            data-username="${escapeHtml(user.username)}"
+          >
+            <strong>${escapeHtml(user.displayName || user.username)}</strong>
+            <span class="pm-meta">${escapeHtml(user.isGuest ? "Guest" : "Registered")}</span>
+          </button>
+          ${user.isPublishing ? `
+            <button
+              type="button"
+              class="user-cam-btn"
+              data-open-media-id="${escapeHtml(user.socketId)}"
+              title="Open ${escapeHtml(user.displayName || user.username)}'s camera"
+              aria-label="Open ${escapeHtml(user.displayName || user.username)} camera"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+              </svg>
+            </button>
+          ` : ""}
+        </div>
       `;
-
-      item.appendChild(button);
       elements.usersList.appendChild(item);
     });
   }
@@ -616,8 +647,11 @@
       state.localStream = null;
     }
 
-    state.callMode = null;
-    state.callParticipants = [];
+    state.isPublishing = false;
+    state.cameraEnabled = false;
+    state.micEnabled = false;
+    state.mediaPublishers = [];
+    state.openMediaIds.clear();
     renderAccount();
     renderCallPanel();
   }
@@ -630,7 +664,7 @@
 
     const connection = new RTCPeerConnection(getRtcConfig());
 
-    if (state.localStream) {
+    if (state.localStream && state.isPublishing) {
       state.localStream.getTracks().forEach(function (track) {
         connection.addTrack(track, state.localStream);
       });
@@ -665,7 +699,7 @@
   }
 
   async function createOfferForParticipant(targetSocketId) {
-    if (!state.localStream || !state.socket || targetSocketId === state.currentSocketId) {
+    if (!state.localStream || !state.socket || !state.isPublishing || targetSocketId === state.currentSocketId) {
       return;
     }
 
@@ -679,13 +713,7 @@
   }
 
   async function syncPeerConnections() {
-    if (!state.callMode || !state.localStream) {
-      Array.from(state.peerConnections.keys()).forEach(closePeerConnection);
-      renderCallPanel();
-      return;
-    }
-
-    const participantIds = new Set(state.callParticipants.map(function (participant) {
+    const participantIds = new Set(state.mediaPublishers.map(function (participant) {
       return participant.socketId;
     }));
 
@@ -696,33 +724,17 @@
     });
 
     Array.from(state.peerConnections.keys()).forEach(function (socketId) {
-      if (!participantIds.has(socketId)) {
+      if (!participantIds.has(socketId) || (!state.openMediaIds.has(socketId) && socketId !== state.currentSocketId)) {
         closePeerConnection(socketId);
       }
     });
 
-    const others = state.callParticipants
-      .filter(function (participant) {
-        return participant.socketId !== state.currentSocketId;
-      })
-      .sort(function (a, b) {
-        return a.socketId.localeCompare(b.socketId);
-      });
-
-    for (const participant of others) {
-      if (state.currentSocketId.localeCompare(participant.socketId) < 0) {
-        await createOfferForParticipant(participant.socketId);
-      } else if (!state.peerConnections.has(participant.socketId)) {
-        createPeerConnection(participant.socketId);
-      }
-    }
-
     renderCallPanel();
   }
 
-  async function startCall(mode) {
+  async function startCall() {
     if (!state.me || state.me.isGuest) {
-      showToast("Create an account to unlock voice and video.", "error");
+      showToast("Create an account to publish your camera.", "error");
       return;
     }
 
@@ -739,19 +751,21 @@
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: mode === "video" ? { facingMode: "user" } : false
+        video: { facingMode: "user" }
       });
 
       cleanupCallState();
       state.localStream = stream;
-      state.callMode = mode;
-      state.pushToTalkActive = false;
-      setMicrophoneEnabled(false);
+      state.isPublishing = true;
+      state.cameraEnabled = true;
+      state.micEnabled = true;
+      state.openMediaIds.add(state.currentSocketId);
+      setMicrophoneEnabled(true);
       renderAccount();
       renderCallPanel();
 
       if (state.socket) {
-        state.socket.emit("join call", { mediaKind: mode });
+        state.socket.emit("start publishing");
       }
     } catch (error) {
       if (error && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")) {
@@ -769,16 +783,15 @@
         return;
       }
 
-      showToast(`Unable to start ${mode === "video" ? "video" : "voice"}: ${error?.message || "unknown error"}`, "error");
+      showToast(`Unable to start camera: ${error?.message || "unknown error"}`, "error");
     }
   }
 
   function leaveCall(announce) {
-    if (announce !== false && state.socket && state.callMode) {
-      state.socket.emit("leave call");
+    if (announce !== false && state.socket && state.isPublishing) {
+      state.socket.emit("stop publishing");
     }
 
-    state.pushToTalkActive = false;
     cleanupCallState();
   }
 
@@ -905,12 +918,12 @@
       renderTyping();
     });
 
-    socket.on("room call state", async function (payload) {
+    socket.on("room media state", async function (payload) {
       if (payload.roomSlug !== state.activeRoom) {
         return;
       }
 
-      state.callParticipants = Array.isArray(payload.participants) ? payload.participants : [];
+      state.mediaPublishers = Array.isArray(payload.publishers) ? payload.publishers : [];
       await syncPeerConnections();
       renderAccount();
       renderCallPanel();
@@ -939,6 +952,14 @@
         state.messages = [];
         renderMessages();
       }
+    });
+
+    socket.on("media view requested", async function (payload) {
+      if (!state.isPublishing || !state.localStream) {
+        return;
+      }
+
+      await createOfferForParticipant(payload.viewerSocketId);
     });
 
     socket.on("webrtc offer", async function (payload) {
@@ -994,13 +1015,14 @@
 
   function joinRoom(roomSlug) {
     if (!state.socket || !roomSlug) return;
-    if (state.callMode) {
+    if (state.isPublishing) {
       leaveCall();
     }
     state.activeRoom = roomSlug;
     localStorage.setItem(storageKeys.lastRoom, roomSlug);
     state.messages = [];
-    state.callParticipants = [];
+    state.mediaPublishers = [];
+    state.openMediaIds.clear();
     renderCallPanel();
     renderRooms();
     renderMessages();
@@ -1272,6 +1294,58 @@
     state.socket.emit("delete message", { messageId });
   }
 
+  function openPublishedMedia(socketId) {
+    if (!state.socket || !socketId) {
+      return;
+    }
+
+    state.openMediaIds.add(socketId);
+    renderCallPanel();
+
+    if (socketId !== state.currentSocketId) {
+      state.socket.emit("request media view", { toSocketId: socketId });
+    }
+  }
+
+  function toggleLocalMicrophone() {
+    if (!state.isPublishing || !state.localStream) {
+      return;
+    }
+
+    state.micEnabled = !state.micEnabled;
+    setMicrophoneEnabled(state.micEnabled);
+
+    if (state.socket) {
+      state.socket.emit("update media status", {
+        cameraEnabled: state.cameraEnabled,
+        micEnabled: state.micEnabled
+      });
+    }
+
+    renderAccount();
+    renderCallPanel();
+  }
+
+  function toggleLocalCamera() {
+    if (!state.isPublishing || !state.localStream) {
+      return;
+    }
+
+    state.cameraEnabled = !state.cameraEnabled;
+    state.localStream.getVideoTracks().forEach(function (track) {
+      track.enabled = state.cameraEnabled;
+    });
+
+    if (state.socket) {
+      state.socket.emit("update media status", {
+        cameraEnabled: state.cameraEnabled,
+        micEnabled: state.micEnabled
+      });
+    }
+
+    renderCallPanel();
+  }
+
   function handleCallPointerDown(event) {
     const handle = event.target.closest("[data-call-drag-handle='true']");
     const card = handle ? handle.closest("[data-call-socket-id]") : null;
@@ -1335,49 +1409,55 @@
     elements.messageInput.addEventListener("input", handleTypingInput);
     elements.messages.addEventListener("click", handleMessageActions);
     elements.callParticipants.addEventListener("pointerdown", handleCallPointerDown);
+    elements.callParticipants.addEventListener("click", function (event) {
+      if (event.target.closest("[data-toggle-mic='true']")) {
+        toggleLocalMicrophone();
+        return;
+      }
+
+      if (event.target.closest("[data-toggle-camera='true']")) {
+        toggleLocalCamera();
+      }
+    });
     elements.logoutBtn.addEventListener("click", function () {
       logout(true);
     });
     elements.joinAudioBtn.addEventListener("click", function () {
-      startCall("audio");
-    });
-    elements.joinVideoBtn.addEventListener("click", function () {
-      startCall("video");
+      startCall();
     });
     elements.leaveCallBtn.addEventListener("click", function () {
       leaveCall();
     });
-    elements.pushToTalkBtn.addEventListener("pointerdown", function (event) {
-      if (!state.callMode) {
-        return;
-      }
-
-      state.pushToTalkActive = true;
-      setMicrophoneEnabled(true);
-      event.preventDefault();
-    });
-    elements.pushToTalkBtn.addEventListener("pointerup", function () {
-      if (!state.callMode) {
-        return;
-      }
-
-      state.pushToTalkActive = false;
-      setMicrophoneEnabled(false);
-    });
-    elements.pushToTalkBtn.addEventListener("pointerleave", function () {
-      if (!state.callMode || !state.pushToTalkActive) {
-        return;
-      }
-
-      state.pushToTalkActive = false;
-      setMicrophoneEnabled(false);
-    });
+    elements.pushToTalkBtn.addEventListener("click", toggleLocalMicrophone);
     elements.deleteRoomBtn.addEventListener("click", handleDeleteRoom);
 
     elements.roomList.addEventListener("click", function (event) {
       const button = event.target.closest("[data-room-slug]");
       if (!button) return;
       joinRoom(button.dataset.roomSlug);
+    });
+
+    elements.usersList.addEventListener("click", function (event) {
+      const openMediaButton = event.target.closest("[data-open-media-id]");
+      if (openMediaButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        openPublishedMedia(openMediaButton.dataset.openMediaId);
+      }
+    });
+
+    const sidebarTabs = document.getElementById("sidebar-tabs");
+    sidebarTabs.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-sidebar-tab]");
+      if (!button) return;
+
+      document.querySelectorAll("[data-sidebar-tab]").forEach(function (tabButton) {
+        tabButton.classList.toggle("is-active", tabButton.dataset.sidebarTab === button.dataset.sidebarTab);
+      });
+
+      document.querySelectorAll("[data-sidebar-panel]").forEach(function (panel) {
+        panel.classList.toggle("is-active", panel.dataset.sidebarPanel === button.dataset.sidebarTab);
+      });
     });
 
     function userTriggerHandler(event) {
@@ -1403,23 +1483,11 @@
     });
 
     document.addEventListener("keydown", function (event) {
-      if (event.key === "Alt" && canUsePushToTalk(event.target) && !state.pushToTalkActive) {
-        state.pushToTalkActive = true;
-        setMicrophoneEnabled(true);
-      }
-
       if (event.key === "Escape") {
         closeUserMenu();
         closeModal(elements.pmModalOverlay);
         closeModal(elements.roomModalOverlay);
         closeModal(elements.preferencesModalOverlay);
-      }
-    });
-
-    document.addEventListener("keyup", function (event) {
-      if (event.key === "Alt" && state.pushToTalkActive) {
-        state.pushToTalkActive = false;
-        setMicrophoneEnabled(false);
       }
     });
 

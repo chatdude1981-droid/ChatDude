@@ -10,7 +10,7 @@ ChatDude is a lightweight realtime chat app built for a static frontend on GitHu
 - Public room history persisted on the backend
 - Custom room creation for registered users
 - Private messaging for registered users
-- Lightweight room-based voice and video calls for registered users
+- Lightweight published camera/audio streams for registered users
 - Guest auto-reconnect using the last guest name on the same device
 - Basic moderation: room creators can delete their rooms, and registered users can delete their own messages
 - Room presence, typing indicators, and clickable user actions
@@ -57,8 +57,8 @@ Notes:
 - `CLIENT_ORIGIN` can be a comma-separated list of allowed frontend origins.
 - `AUTH_SECRET` should be set in Render so account tokens are not signed with the development fallback secret.
 - If you want persistence on Render, attach a persistent disk or move to a hosted database.
-- Voice/video calls use browser WebRTC over HTTPS with Socket.IO signaling through the existing Render backend.
-- This implementation is optimized for small room calls on free-tier hosting by using direct peer-to-peer mesh connections instead of a separate media server.
+- Published cameras use browser WebRTC over HTTPS with Socket.IO signaling through the existing Render backend.
+- This implementation is optimized for small-room viewing on free-tier hosting by using direct peer-to-peer connections instead of a separate media server.
 
 ### GitHub Pages frontend
 
