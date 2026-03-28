@@ -69,7 +69,6 @@
     registerDisplayName: document.getElementById("register-display-name"),
     registerUsername: document.getElementById("register-username"),
     registerPassword: document.getElementById("register-password"),
-    sessionTitle: document.getElementById("session-title"),
     activeRoomPill: document.getElementById("active-room-pill"),
     accountBadge: document.getElementById("account-badge"),
     openInboxBtn: document.getElementById("open-inbox-btn"),
@@ -292,7 +291,6 @@
     const roleLabel = state.me.isGuest
       ? '<span>Guest account</span>'
       : verifiedBadgeMarkup();
-    elements.sessionTitle.textContent = `${state.me.displayName || state.me.username} is live`;
     elements.accountBadge.innerHTML = `
       <strong>${escapeHtml(state.me.displayName || state.me.username)}</strong>
       ${roleLabel}
