@@ -44,11 +44,13 @@
     registerForm: document.getElementById("register-form"),
     guestName: document.getElementById("guest-name"),
     guestRoomSelect: document.getElementById("guest-room-select"),
+    loginRoomSelect: document.getElementById("login-room-select"),
     loginUsername: document.getElementById("login-username"),
     loginPassword: document.getElementById("login-password"),
     registerDisplayName: document.getElementById("register-display-name"),
     registerUsername: document.getElementById("register-username"),
     registerPassword: document.getElementById("register-password"),
+    registerRoomSelect: document.getElementById("register-room-select"),
     sessionTitle: document.getElementById("session-title"),
     activeRoomPill: document.getElementById("active-room-pill"),
     accountBadge: document.getElementById("account-badge"),
@@ -215,11 +217,13 @@
   function renderAccount() {
     if (!state.me) return;
 
-    const roleLabel = state.me.isGuest ? "Guest account" : "Registered account";
+    const roleLabel = state.me.isGuest
+      ? '<span>Guest account</span>'
+      : '<span class="verified-badge" title="Verified account" aria-label="Verified account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.75 11.25 15 15.75 9.75"></path><path d="M12 3l2.3 2.1 3.1.2.9 3 2.5 1.8-1 3 1 3-2.5 1.8-.9 3-3.1.2L12 21l-2.3-2.1-3.1-.2-.9-3L3.2 13.9l1-3-1-3 2.5-1.8.9-3 3.1-.2L12 3z"></path></svg></span>';
     elements.sessionTitle.textContent = `${state.me.displayName || state.me.username} is live`;
     elements.accountBadge.innerHTML = `
       <strong>${escapeHtml(state.me.displayName || state.me.username)}</strong>
-      <span>${escapeHtml(roleLabel)}</span>
+      ${roleLabel}
     `;
 
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
@@ -255,6 +259,8 @@
   function renderRooms() {
     elements.roomList.innerHTML = "";
     elements.guestRoomSelect.innerHTML = "";
+    elements.loginRoomSelect.innerHTML = "";
+    elements.registerRoomSelect.innerHTML = "";
 
     state.rooms.forEach(function (room) {
       const roomButton = document.createElement("button");
@@ -276,6 +282,12 @@
       option.textContent = room.name;
       option.selected = room.slug === state.activeRoom;
       elements.guestRoomSelect.appendChild(option);
+
+      const loginOption = option.cloneNode(true);
+      elements.loginRoomSelect.appendChild(loginOption);
+
+      const registerOption = option.cloneNode(true);
+      elements.registerRoomSelect.appendChild(registerOption);
     });
 
     const activeRoom = roomBySlug(state.activeRoom) || state.rooms[0];
@@ -488,7 +500,9 @@
 
         const role = document.createElement("span");
         role.className = "message-role";
-        role.textContent = message.accountType === "registered" ? "Registered" : "Guest";
+        role.innerHTML = message.accountType === "registered"
+          ? '<span class="verified-badge" title="Verified account" aria-label="Verified account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.75 11.25 15 15.75 9.75"></path><path d="M12 3l2.3 2.1 3.1.2.9 3 2.5 1.8-1 3 1 3-2.5 1.8-.9 3-3.1.2L12 21l-2.3-2.1-3.1-.2-.9-3L3.2 13.9l1-3-1-3 2.5-1.8.9-3 3.1-.2L12 3z"></path></svg></span>'
+          : "Guest";
         left.appendChild(role);
 
         meta.appendChild(left);
@@ -555,7 +569,11 @@
             data-username="${escapeHtml(user.username)}"
           >
             <strong>${escapeHtml(user.displayName || user.username)}</strong>
-            <span class="pm-meta">${escapeHtml(user.isGuest ? "Guest" : "Registered")}</span>
+            <span class="pm-meta">${
+              user.isGuest
+                ? "Guest"
+                : '<span class="verified-badge" title="Verified account" aria-label="Verified account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.75 11.25 15 15.75 9.75"></path><path d="M12 3l2.3 2.1 3.1.2.9 3 2.5 1.8-1 3 1 3-2.5 1.8-.9 3-3.1.2L12 21l-2.3-2.1-3.1-.2-.9-3L3.2 13.9l1-3-1-3 2.5-1.8.9-3 3.1-.2L12 3z"></path></svg></span>'
+            }</span>
           </button>
           ${user.isPublishing ? `
             <button
@@ -1104,6 +1122,7 @@
     event.preventDefault();
 
     try {
+      state.activeRoom = elements.loginRoomSelect.value || state.activeRoom;
       const payload = await api("/api/auth/login", {
         method: "POST",
         body: {
@@ -1126,6 +1145,7 @@
     event.preventDefault();
 
     try {
+      state.activeRoom = elements.registerRoomSelect.value || state.activeRoom;
       const payload = await api("/api/auth/register", {
         method: "POST",
         body: {
