@@ -1462,13 +1462,21 @@
     applyPreferences();
     positionAccountMenu();
     elements.accountMenu.classList.remove("hidden");
+    elements.accountMenu.hidden = false;
     elements.accountMenu.style.display = "grid";
+    elements.accountMenu.style.visibility = "visible";
+    elements.accountMenu.style.opacity = "1";
+    elements.accountMenu.style.pointerEvents = "auto";
     elements.accountBadge.setAttribute("aria-expanded", "true");
   }
 
   function closeAccountMenu() {
     elements.accountMenu.classList.add("hidden");
+    elements.accountMenu.hidden = true;
     elements.accountMenu.style.display = "";
+    elements.accountMenu.style.visibility = "";
+    elements.accountMenu.style.opacity = "";
+    elements.accountMenu.style.pointerEvents = "";
     elements.accountBadge.setAttribute("aria-expanded", "false");
   }
 
