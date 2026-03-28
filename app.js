@@ -111,10 +111,6 @@
   }
 
   function formatTime(payload) {
-    if (typeof payload?.time === "string" && payload.time.trim()) {
-      return payload.time.trim();
-    }
-
     if (typeof payload?.timestamp === "string" && payload.timestamp.trim()) {
       const parsed = new Date(payload.timestamp);
       if (!Number.isNaN(parsed.getTime())) {
@@ -123,6 +119,10 @@
           minute: "2-digit"
         });
       }
+    }
+
+    if (typeof payload?.time === "string" && payload.time.trim()) {
+      return payload.time.trim();
     }
 
     return new Date().toLocaleTimeString([], {
@@ -220,10 +220,11 @@
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
     elements.openPreferencesBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
-    const canUseCalls = Boolean(state.me && !state.me.isGuest && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
-    elements.joinAudioBtn.classList.toggle("hidden", !canUseCalls || Boolean(state.callMode));
-    elements.joinVideoBtn.classList.toggle("hidden", !canUseCalls || Boolean(state.callMode));
-    elements.leaveCallBtn.classList.toggle("hidden", !state.callMode);
+    const browserSupportsCalls = Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
+    const canUseCalls = Boolean(state.me && !state.me.isGuest && browserSupportsCalls);
+    elements.joinAudioBtn.disabled = !canUseCalls || Boolean(state.callMode);
+    elements.joinVideoBtn.disabled = !canUseCalls || Boolean(state.callMode);
+    elements.leaveCallBtn.disabled = !state.callMode;
   }
 
   function canManageActiveRoom() {
@@ -280,19 +281,15 @@
   function renderCallPanel() {
     const canUseCalls = Boolean(state.me && !state.me.isGuest && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
     const roomHasParticipants = state.callParticipants.length > 0;
-    const shouldShowPanel = canUseCalls || roomHasParticipants;
-
-    elements.callPanel.classList.toggle("hidden", !shouldShowPanel);
-
-    if (!shouldShowPanel) {
-      return;
-    }
+    const browserSupportsCalls = Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
 
     if (!canUseCalls) {
       elements.callStatusTitle.textContent = "Voice and video";
-      elements.callStatusNote.textContent = state.me && state.me.isGuest
-        ? "Create an account to join room calls."
-        : "Your browser does not support room calls here.";
+      elements.callStatusNote.textContent = !browserSupportsCalls
+        ? "Your browser does not support room calls here."
+        : state.me && state.me.isGuest
+          ? "Create an account to join room calls."
+          : "Sign in to use room calls.";
     } else if (state.callMode) {
       elements.callStatusTitle.textContent = state.callMode === "video" ? "Video call live" : "Voice call live";
       elements.callStatusNote.textContent = `${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"} connected in this room.`;
