@@ -548,7 +548,7 @@
         remoteVideo.autoplay = true;
         remoteVideo.playsInline = true;
         remoteVideo.srcObject = remoteStream;
-        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: true };
+        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: false };
         remoteVideo.volume = remoteSettings.volume;
         remoteVideo.muted = remoteSettings.muted;
         card.appendChild(remoteVideo);
@@ -556,6 +556,11 @@
         if (playAttempt && typeof playAttempt.catch === "function") {
           playAttempt.catch(function () {
             remoteVideo.muted = true;
+            state.remoteSettings[participant.socketId] = {
+              volume: remoteSettings.volume,
+              muted: true
+            };
+            showToast("Browser blocked auto-audio for this camera. Use the speaker control to unmute.", "error");
           });
         }
       } else {
@@ -578,7 +583,7 @@
         `;
         card.appendChild(controls);
       } else if (remoteStream) {
-        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: true };
+        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: false };
         const controls = document.createElement("div");
         controls.className = "camera-controls";
         controls.innerHTML = `
@@ -2099,6 +2104,11 @@
       return;
     }
 
+    const existing = state.remoteSettings[socketId] || { volume: 1, muted: false };
+    state.remoteSettings[socketId] = {
+      volume: existing.volume,
+      muted: false
+    };
     state.openMediaIds.add(socketId);
     renderCallPanel();
 
