@@ -35,6 +35,7 @@ body {
     radial-gradient(circle at 50% 100%, rgba(236, 72, 153, 0.15), transparent 32%),
     linear-gradient(180deg, #040a14 0%, #09111f 44%, #0d1728 100%);
   transition: background 240ms ease, color 240ms ease;
+  overflow: hidden;
 }
 
 body[data-background-style="midnight"] {
@@ -141,7 +142,8 @@ button:active {
 .page-shell {
   width: min(1440px, calc(100vw - 24px));
   margin: 0 auto;
-  padding: 24px 0 40px;
+  padding: 12px 0;
+  height: 100vh;
 }
 
 .card {
@@ -289,11 +291,12 @@ button:active {
 
 .chat-shell {
   display: grid;
-  gap: 18px;
+  gap: 12px;
+  height: 100%;
 }
 
 .topbar {
-  padding: 18px 22px;
+  padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -323,16 +326,19 @@ button:active {
 
 .app-grid {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
-  gap: 18px;
-  align-items: start;
+  grid-template-columns: 250px minmax(0, 1fr) 280px;
+  gap: 12px;
+  align-items: stretch;
+  min-height: 0;
+  height: 100%;
 }
 
 .room-rail,
 .chat-panel,
 .people-panel,
 .inbox-panel {
-  padding: 20px;
+  padding: 14px;
+  min-height: 0;
 }
 
 .room-list,
@@ -389,10 +395,12 @@ button:active {
 }
 
 .chat-panel {
-  min-height: 74vh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 16px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .chat-panel-header {
@@ -411,21 +419,17 @@ button:active {
 }
 
 .header-side {
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.call-controls button {
-  width: auto;
+  align-items: center;
 }
 
 .call-panel {
   display: grid;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 24px;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.035);
+  overflow: hidden;
 }
 
 .call-panel-header {
@@ -437,24 +441,34 @@ button:active {
 }
 
 .call-participants {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  position: relative;
+  min-height: 180px;
+  height: min(24vh, 220px);
+  overflow: hidden;
+  border-radius: 18px;
+  background: rgba(3, 8, 18, 0.46);
 }
 
 .call-card {
-  position: relative;
+  position: absolute;
   overflow: hidden;
-  min-height: 170px;
-  border-radius: 22px;
+  width: 170px;
+  height: 114px;
+  border-radius: 18px;
   background: rgba(5, 11, 22, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.call-card.is-dragging {
+  cursor: grabbing;
 }
 
 .call-card video {
   width: 100%;
   height: 100%;
-  min-height: 170px;
   object-fit: cover;
   display: block;
   background: #020617;
@@ -463,7 +477,7 @@ button:active {
 .call-card.is-audio-only {
   display: grid;
   place-items: center;
-  padding: 18px;
+  padding: 12px;
   background:
     radial-gradient(circle at top, rgba(56, 189, 248, 0.16), transparent 38%),
     rgba(5, 11, 22, 0.92);
@@ -493,6 +507,7 @@ button:active {
   border-radius: 16px;
   background: rgba(2, 6, 23, 0.74);
   color: var(--text);
+  pointer-events: none;
 }
 
 .call-role {
@@ -502,17 +517,17 @@ button:active {
 
 .messages {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   align-content: start;
-  min-height: 420px;
-  max-height: calc(100vh - 290px);
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
   padding-right: 4px;
 }
 
 .message-item {
-  padding: 15px 16px;
-  border-radius: 22px;
+  padding: 11px 12px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -592,12 +607,38 @@ button:active {
 .composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 8px;
+  align-items: center;
+}
+
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .composer button {
   width: auto;
-  min-width: 120px;
+  min-width: 88px;
+}
+
+.icon-control {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.icon-control svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .side-panel {
@@ -606,8 +647,20 @@ button:active {
 }
 
 .users-list {
-  max-height: 320px;
+  max-height: none;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.room-list,
+.pm-feed {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.side-panel,
+.room-rail {
+  min-height: 0;
 }
 
 .user-row {
@@ -720,7 +773,7 @@ button:active {
 
 @media (max-width: 1180px) {
   .app-grid {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
   }
 
   .side-panel {
@@ -754,7 +807,7 @@ button:active {
 @media (max-width: 720px) {
   .page-shell {
     width: min(100vw, calc(100vw - 14px));
-    padding-top: 10px;
+    padding-top: 8px;
   }
 
   .hero-panel,
@@ -777,8 +830,13 @@ button:active {
     grid-template-columns: 1fr;
   }
 
-  .messages {
-    max-height: none;
-    min-height: 340px;
+  .composer-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .call-card {
+    width: 150px;
+    height: 102px;
   }
 }

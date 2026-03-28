@@ -27,7 +27,10 @@
     localStream: null,
     callMode: null,
     peerConnections: new Map(),
-    remoteStreams: new Map()
+    remoteStreams: new Map(),
+    callLayout: {},
+    draggingCall: null,
+    pushToTalkActive: false
   };
 
   const elements = {
@@ -223,6 +226,9 @@
     elements.joinAudioBtn.disabled = Boolean(state.callMode);
     elements.joinVideoBtn.disabled = Boolean(state.callMode);
     elements.leaveCallBtn.disabled = !state.callMode;
+    elements.joinAudioBtn.title = state.callMode ? "Already in a call" : "Join voice call";
+    elements.joinVideoBtn.title = state.callMode ? "Already in a call" : "Join video call";
+    elements.leaveCallBtn.title = state.callMode ? "Leave call" : "Not in a call";
   }
 
   function canManageActiveRoom() {
@@ -276,6 +282,49 @@
     return (name || "?").slice(0, 1).toUpperCase();
   }
 
+  function getDefaultCallPosition(index) {
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+
+    return {
+      x: 12 + (column * 182),
+      y: 12 + (row * 126)
+    };
+  }
+
+  function clampCallPosition(position) {
+    const container = elements.callParticipants;
+    const maxX = Math.max(0, container.clientWidth - 170);
+    const maxY = Math.max(0, container.clientHeight - 114);
+
+    return {
+      x: Math.min(Math.max(position.x, 0), maxX),
+      y: Math.min(Math.max(position.y, 0), maxY)
+    };
+  }
+
+  function setMicrophoneEnabled(enabled) {
+    if (!state.localStream) {
+      return;
+    }
+
+    state.localStream.getAudioTracks().forEach(function (track) {
+      track.enabled = enabled;
+    });
+  }
+
+  function canUsePushToTalk(eventTarget) {
+    if (!state.callMode || !state.localStream) {
+      return false;
+    }
+
+    if (!eventTarget || !(eventTarget instanceof Element)) {
+      return true;
+    }
+
+    return !eventTarget.closest("input, textarea, select, button");
+  }
+
   function renderCallPanel() {
     const canUseCalls = Boolean(state.me && !state.me.isGuest && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
     const roomHasParticipants = state.callParticipants.length > 0;
@@ -290,7 +339,7 @@
           : "Sign in to use room calls.";
     } else if (state.callMode) {
       elements.callStatusTitle.textContent = state.callMode === "video" ? "Video call live" : "Voice call live";
-      elements.callStatusNote.textContent = `${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"} connected in this room.`;
+      elements.callStatusNote.textContent = `${state.callParticipants.length} participant${state.callParticipants.length === 1 ? "" : "s"} connected. Hold Alt to talk and drag tiles to reposition them.`;
     } else {
       elements.callStatusTitle.textContent = "Voice and video";
       elements.callStatusNote.textContent = roomHasParticipants
@@ -310,6 +359,14 @@
       const remoteStream = state.remoteStreams.get(participant.socketId);
       const isVideo = participant.mediaKind === "video" && remoteStream;
       card.className = `call-card${isVideo ? "" : " is-audio-only"}`;
+      card.dataset.callSocketId = participant.socketId;
+
+      const position = clampCallPosition(
+        state.callLayout[participant.socketId] || getDefaultCallPosition(state.callParticipants.indexOf(participant))
+      );
+      state.callLayout[participant.socketId] = position;
+      card.style.left = `${position.x}px`;
+      card.style.top = `${position.y}px`;
 
       if (participant.socketId === state.currentSocketId && state.localStream) {
         if (state.callMode === "video") {
@@ -619,6 +676,12 @@
       return participant.socketId;
     }));
 
+    Object.keys(state.callLayout).forEach(function (socketId) {
+      if (!participantIds.has(socketId)) {
+        delete state.callLayout[socketId];
+      }
+    });
+
     Array.from(state.peerConnections.keys()).forEach(function (socketId) {
       if (!participantIds.has(socketId)) {
         closePeerConnection(socketId);
@@ -669,6 +732,8 @@
       cleanupCallState();
       state.localStream = stream;
       state.callMode = mode;
+      state.pushToTalkActive = false;
+      setMicrophoneEnabled(false);
       renderAccount();
       renderCallPanel();
 
@@ -700,6 +765,7 @@
       state.socket.emit("leave call");
     }
 
+    state.pushToTalkActive = false;
     cleanupCallState();
   }
 
@@ -1193,6 +1259,60 @@
     state.socket.emit("delete message", { messageId });
   }
 
+  function handleCallPointerDown(event) {
+    const card = event.target.closest("[data-call-socket-id]");
+    if (!card) {
+      return;
+    }
+
+    const socketId = card.dataset.callSocketId;
+    const currentPosition = state.callLayout[socketId] || { x: 0, y: 0 };
+    state.draggingCall = {
+      socketId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: currentPosition.x,
+      originY: currentPosition.y
+    };
+
+    card.classList.add("is-dragging");
+    if (card.setPointerCapture) {
+      card.setPointerCapture(event.pointerId);
+    }
+    event.preventDefault();
+  }
+
+  function handleCallPointerMove(event) {
+    if (!state.draggingCall || state.draggingCall.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const nextPosition = clampCallPosition({
+      x: state.draggingCall.originX + (event.clientX - state.draggingCall.startX),
+      y: state.draggingCall.originY + (event.clientY - state.draggingCall.startY)
+    });
+
+    state.callLayout[state.draggingCall.socketId] = nextPosition;
+    renderCallPanel();
+  }
+
+  function handleCallPointerUp(event) {
+    if (!state.draggingCall || state.draggingCall.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const card = elements.callParticipants.querySelector(`[data-call-socket-id="${state.draggingCall.socketId}"]`);
+    if (card) {
+      card.classList.remove("is-dragging");
+      if (card.releasePointerCapture) {
+        card.releasePointerCapture(event.pointerId);
+      }
+    }
+
+    state.draggingCall = null;
+  }
+
   function bindEvents() {
     elements.authTabs.addEventListener("click", function (event) {
       const button = event.target.closest("[data-tab]");
@@ -1206,6 +1326,7 @@
     elements.messageForm.addEventListener("submit", handleMessageSubmit);
     elements.messageInput.addEventListener("input", handleTypingInput);
     elements.messages.addEventListener("click", handleMessageActions);
+    elements.callParticipants.addEventListener("pointerdown", handleCallPointerDown);
     elements.logoutBtn.addEventListener("click", function () {
       logout(true);
     });
@@ -1249,6 +1370,11 @@
     });
 
     document.addEventListener("keydown", function (event) {
+      if (event.key === "Alt" && canUsePushToTalk(event.target) && !state.pushToTalkActive) {
+        state.pushToTalkActive = true;
+        setMicrophoneEnabled(true);
+      }
+
       if (event.key === "Escape") {
         closeUserMenu();
         closeModal(elements.pmModalOverlay);
@@ -1256,6 +1382,17 @@
         closeModal(elements.preferencesModalOverlay);
       }
     });
+
+    document.addEventListener("keyup", function (event) {
+      if (event.key === "Alt" && state.pushToTalkActive) {
+        state.pushToTalkActive = false;
+        setMicrophoneEnabled(false);
+      }
+    });
+
+    document.addEventListener("pointermove", handleCallPointerMove);
+    document.addEventListener("pointerup", handleCallPointerUp);
+    document.addEventListener("pointercancel", handleCallPointerUp);
 
     elements.menuPmBtn.addEventListener("click", openPmModal);
     elements.pmCancelBtn.addEventListener("click", function () {

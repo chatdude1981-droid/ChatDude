@@ -152,11 +152,6 @@
             </div>
             <div class="header-side">
               <div id="typing-indicator" class="typing-indicator"></div>
-              <div class="call-controls">
-                <button id="join-audio-btn" class="ghost-button" type="button">Join Voice</button>
-                <button id="join-video-btn" class="ghost-button" type="button">Join Video</button>
-                <button id="leave-call-btn" class="ghost-button" type="button">Leave Call</button>
-              </div>
             </div>
           </div>
 
@@ -180,7 +175,30 @@
               maxlength="600"
               placeholder="Type a message for the room..."
             />
-            <button id="send-message-btn" type="submit">Send</button>
+            <div class="composer-tools">
+              <button id="join-audio-btn" class="ghost-button icon-control" type="button" aria-label="Join voice" title="Join voice">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"></path>
+                  <path d="M18 12a6 6 0 0 1-12 0"></path>
+                  <path d="M12 18v3"></path>
+                  <path d="M8 21h8"></path>
+                </svg>
+              </button>
+              <button id="join-video-btn" class="ghost-button icon-control" type="button" aria-label="Join video" title="Join video">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                  <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                </svg>
+              </button>
+              <button id="leave-call-btn" class="ghost-button icon-control" type="button" aria-label="Leave call" title="Leave call">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4.5 15.5c2.2-2 4.8-3 7.5-3s5.3 1 7.5 3"></path>
+                  <path d="M9 15.5v2.5"></path>
+                  <path d="M15 15.5v2.5"></path>
+                </svg>
+              </button>
+              <button id="send-message-btn" type="submit">Send</button>
+            </div>
           </form>
         </main>
 
