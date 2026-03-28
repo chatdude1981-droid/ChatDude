@@ -686,14 +686,30 @@
       const item = document.createElement("li");
       item.className = `message-item ${message.kind}`;
 
-      const meta = document.createElement("div");
-      meta.className = "message-meta";
-
       if (message.kind === "system") {
-        meta.innerHTML = `
-          <span class="time-label">${escapeHtml(formatTime(message))}</span>
-        `;
+        const body = document.createElement("div");
+        body.className = "message-bubble";
+
+        const textRow = document.createElement("div");
+        textRow.className = "message-text-row";
+
+        const text = document.createElement("div");
+        text.className = "message-text";
+        text.textContent = message.message;
+        textRow.appendChild(text);
+
+        const time = document.createElement("span");
+        time.className = "time-label bubble-time";
+        time.textContent = formatTime(message);
+        textRow.appendChild(time);
+
+        body.appendChild(textRow);
+        item.appendChild(body);
+        elements.messages.appendChild(item);
+        return;
       } else {
+        const meta = document.createElement("div");
+        meta.className = "message-meta";
         const userButton = document.createElement("button");
         userButton.type = "button";
         userButton.className = "username-button";
@@ -721,33 +737,42 @@
         time.className = "time-label";
         time.textContent = formatTime(message);
         meta.appendChild(time);
+
+        const body = document.createElement("div");
+        body.className = "message-bubble";
+        body.appendChild(meta);
+
+        const textRow = document.createElement("div");
+        textRow.className = "message-text-row";
+
+        const text = document.createElement("div");
+        text.className = "message-text";
+        text.textContent = message.message;
+        text.style.cssText = styleFromPreferences(message.preferences);
+        textRow.appendChild(text);
+
+        const bubbleTime = document.createElement("span");
+        bubbleTime.className = "time-label bubble-time";
+        bubbleTime.textContent = formatTime(message);
+        textRow.appendChild(bubbleTime);
+        body.appendChild(textRow);
+
+        if (canDeleteMessage(message)) {
+          const actions = document.createElement("div");
+          actions.className = "message-actions";
+          actions.innerHTML = `
+            <button
+              type="button"
+              class="inline-action"
+              data-delete-message-id="${escapeHtml(message.id)}"
+            >Delete</button>
+          `;
+          body.appendChild(actions);
+        }
+
+        item.appendChild(body);
+        elements.messages.appendChild(item);
       }
-
-      const body = document.createElement("div");
-      body.className = "message-bubble";
-      body.appendChild(meta);
-
-      const text = document.createElement("div");
-      text.className = "message-text";
-      text.textContent = message.message;
-      text.style.cssText = styleFromPreferences(message.preferences);
-      body.appendChild(text);
-
-      if (canDeleteMessage(message)) {
-        const actions = document.createElement("div");
-        actions.className = "message-actions";
-        actions.innerHTML = `
-          <button
-            type="button"
-            class="inline-action"
-            data-delete-message-id="${escapeHtml(message.id)}"
-          >Delete</button>
-        `;
-        body.appendChild(actions);
-      }
-
-      item.appendChild(body);
-      elements.messages.appendChild(item);
     });
 
     elements.messages.scrollTop = elements.messages.scrollHeight;
@@ -2460,15 +2485,24 @@
     });
     elements.messages.addEventListener("click", handleMessageActions);
     elements.callParticipants.addEventListener("pointerdown", handleCallPointerDown);
+    elements.callParticipants.addEventListener("pointerdown", function (event) {
+      if (event.target.closest("[data-close-local-camera='true'], [data-close-remote-camera], [data-call-fullscreen], [data-toggle-mic='true'], [data-toggle-camera='true'], [data-toggle-remote-mute], [data-remote-volume]")) {
+        event.stopPropagation();
+      }
+    });
     elements.pmWindow.addEventListener("pointerdown", handlePmWindowPointerDown);
     elements.callParticipants.addEventListener("click", function (event) {
       if (event.target.closest("[data-close-local-camera='true']")) {
+        event.preventDefault();
+        event.stopPropagation();
         leaveCall();
         return;
       }
 
       const closeRemoteButton = event.target.closest("[data-close-remote-camera]");
       if (closeRemoteButton) {
+        event.preventDefault();
+        event.stopPropagation();
         closePublishedMedia(closeRemoteButton.dataset.closeRemoteCamera);
         return;
       }

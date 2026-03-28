@@ -839,7 +839,14 @@ button:active {
 
 .message-bubble {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+}
+
+.message-text-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .message-actions {
@@ -866,6 +873,15 @@ button:active {
   line-height: 1.52;
   white-space: pre-wrap;
   word-break: break-word;
+  flex: 1;
+  min-width: 0;
+}
+
+.bubble-time {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  white-space: nowrap;
+  opacity: 0.85;
 }
 
 .message-role,
