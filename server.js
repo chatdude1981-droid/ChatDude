@@ -29,6 +29,13 @@ function updateUserList(room) {
   io.to(room).emit("user list", getUsersInRoom(room));
 }
 
+function timestamp() {
+  return new Date().toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
@@ -42,17 +49,23 @@ io.on("connection", (socket) => {
       username
     });
 
-    socket.to(room).emit("system message", `${username} joined the room`);
+    socket.to(room).emit("system message", {
+      message: `${username} joined the room`,
+      time: timestamp()
+    });
+
     updateUserList(room);
   });
 
   socket.on("chat message", (msg) => {
     const user = users[socket.id];
-    if (!user) return;
+    if (!user || !msg || !msg.trim()) return;
 
     io.to(user.room).emit("chat message", {
       username: user.username,
-      message: msg
+      socketId: socket.id,
+      message: msg.trim(),
+      time: timestamp()
     });
   });
 
@@ -60,23 +73,32 @@ io.on("connection", (socket) => {
     const fromUser = users[socket.id];
     const toUser = users[toSocketId];
 
-    if (!fromUser || !toUser || !message.trim()) return;
+    if (!fromUser || !toUser || !message || !message.trim()) return;
 
     io.to(toSocketId).emit("private message", {
       from: fromUser.username,
-      message
+      fromSocketId: socket.id,
+      message: message.trim(),
+      time: timestamp()
     });
 
     socket.emit("private message", {
       from: `(to ${toUser.username})`,
-      message
+      fromSocketId: toSocketId,
+      message: message.trim(),
+      time: timestamp()
     });
   });
 
   socket.on("disconnect", () => {
     const user = users[socket.id];
+
     if (user) {
-      socket.to(user.room).emit("system message", `${user.username} left the room`);
+      socket.to(user.room).emit("system message", {
+        message: `${user.username} left the room`,
+        time: timestamp()
+      });
+
       delete users[socket.id];
       updateUserList(user.room);
     }

@@ -5,15 +5,104 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ChatDude</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 20px;
+    * {
+      box-sizing: border-box;
     }
 
-    h1 {
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --panel-3: #0b1220;
+      --border: #243041;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0ea5e9;
+      --system: #fbbf24;
+      --private: #c084fc;
+      --danger: #ef4444;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 30%),
+        radial-gradient(circle at top right, rgba(192, 132, 252, 0.08), transparent 25%),
+        linear-gradient(180deg, #0b1120 0%, #0f172a 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .app-shell {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 20px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
       margin-bottom: 20px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 2rem;
+      letter-spacing: 0.5px;
+    }
+
+    .brand p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .room-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: #bae6fd;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 0.95rem;
+      min-height: 42px;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    #join-section {
+      max-width: 700px;
+      margin: 40px auto 0;
+      padding: 24px;
+    }
+
+    #join-section h2 {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    #join-section p {
+      margin-top: 0;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    #join-form {
+      display: grid;
+      grid-template-columns: 1fr 180px 160px;
+      gap: 12px;
     }
 
     #chat-container {
@@ -21,149 +110,371 @@
     }
 
     #main-layout {
-      display: flex;
-      gap: 20px;
-      align-items: flex-start;
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 18px;
+      align-items: start;
     }
 
-    #chat-area {
-      flex: 1;
-    }
-
-    #sidebar {
-      width: 250px;
-      border: 1px solid #ccc;
-      padding: 10px;
+    #chat-panel {
+      padding: 16px;
     }
 
     #messages {
       list-style: none;
       padding: 0;
-      border: 1px solid #ccc;
-      height: 400px;
+      margin: 0 0 14px 0;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(11, 18, 32, 0.9);
+      height: 500px;
       overflow-y: auto;
-      margin-bottom: 10px;
     }
 
     #messages li {
-      padding: 8px 10px;
-      border-bottom: 1px solid #eee;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(36, 48, 65, 0.7);
+      line-height: 1.45;
+      word-break: break-word;
     }
 
-    .system {
-      color: #666;
-      font-style: italic;
+    #messages li:last-child {
+      border-bottom: none;
     }
 
-    .private {
-      color: #7a1fa2;
-      font-style: italic;
+    .message-row {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+
+    .time {
+      color: var(--muted);
+      font-size: 0.8rem;
+      flex-shrink: 0;
     }
 
     .username {
       font-weight: bold;
+      color: var(--accent);
+      cursor: pointer;
+      transition: color 0.15s ease;
     }
 
-    form {
-      display: flex;
-      gap: 10px;
+    .username:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
     }
 
-    input, select, button {
-      padding: 10px;
+    .system {
+      color: var(--system);
+      font-style: italic;
     }
 
-    input {
-      flex: 1;
+    .private {
+      color: #e9d5ff;
+      background: rgba(192, 132, 252, 0.08);
     }
 
-    #join-form {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
+    .private .username {
+      color: var(--private);
+    }
+
+    .system .time {
+      color: #fcd34d;
+    }
+
+    .message-text {
+      color: var(--text);
+    }
+
+    #message-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+    }
+
+    #sidebar {
+      padding: 16px;
+    }
+
+    .sidebar-title {
+      margin: 0 0 12px 0;
+      font-size: 1.1rem;
+    }
+
+    .sidebar-subtitle {
+      margin: 0 0 14px 0;
+      color: var(--muted);
+      font-size: 0.9rem;
     }
 
     #users {
       list-style: none;
       padding: 0;
-      margin: 0 0 15px 0;
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(11, 18, 32, 0.9);
     }
 
     #users li {
-      padding: 6px 8px;
-      border-bottom: 1px solid #eee;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(36, 48, 65, 0.7);
+    }
+
+    #users li:last-child {
+      border-bottom: none;
+    }
+
+    .user-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #22c55e;
+      flex-shrink: 0;
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+    }
+
+    .user-name {
+      color: var(--text);
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+
+    .user-name:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    input,
+    select,
+    button,
+    textarea {
+      font: inherit;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      outline: none;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      background: rgba(11, 18, 32, 0.95);
+      color: var(--text);
+      padding: 12px 14px;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: var(--muted);
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: rgba(56, 189, 248, 0.6);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+    }
+
+    button {
+      background: var(--accent);
+      color: #062033;
+      font-weight: bold;
+      padding: 12px 18px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+
+    button:hover {
+      background: var(--accent-hover);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .muted-empty {
+      color: var(--muted);
+      padding: 14px;
+      font-style: italic;
+    }
+
+    /* User popup menu */
+    #user-menu {
+      position: fixed;
+      display: none;
+      min-width: 180px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      z-index: 1000;
+    }
+
+    #user-menu-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.9rem;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .user-menu-btn {
+      width: 100%;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      padding: 12px 14px;
       cursor: pointer;
     }
 
-    #users li:hover {
-      background: #f5f5f5;
+    .user-menu-btn:hover {
+      background: rgba(56, 189, 248, 0.1);
+      color: #bae6fd;
     }
 
-    #pm-section {
-      margin-top: 15px;
+    /* PM modal */
+    #pm-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1100;
+      padding: 20px;
     }
 
-    #pm-target {
+    #pm-modal {
       width: 100%;
-      margin-bottom: 10px;
+      max-width: 520px;
+      padding: 20px;
+      background: #111827;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
     }
 
-    #pm-input {
-      width: 100%;
-      box-sizing: border-box;
-      margin-bottom: 10px;
+    #pm-modal h3 {
+      margin-top: 0;
+      margin-bottom: 8px;
     }
 
-    #pm-button {
-      width: 100%;
+    #pm-modal p {
+      margin-top: 0;
+      margin-bottom: 14px;
+      color: var(--muted);
     }
 
-    #room-label {
-      margin-bottom: 10px;
-      font-weight: bold;
+    #pm-message {
+      min-height: 120px;
+      resize: vertical;
+      margin-bottom: 14px;
+    }
+
+    .pm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    @media (max-width: 900px) {
+      #main-layout {
+        grid-template-columns: 1fr;
+      }
+
+      #join-form {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      #messages {
+        height: 420px;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>ChatDude</h1>
+  <div class="app-shell">
+    <div class="topbar">
+      <div class="brand">
+        <h1>ChatDude</h1>
+        <p>Realtime chat rooms with private messaging</p>
+      </div>
+      <div class="room-badge" id="room-label">Not connected</div>
+    </div>
 
-  <div id="join-section">
-    <form id="join-form">
-      <input id="username" placeholder="Enter your username" maxlength="20" />
-      <select id="room">
-        <option value="general">General</option>
-        <option value="random">Random</option>
-        <option value="gaming">Gaming</option>
-      </select>
-      <button type="submit">Join Chat</button>
-    </form>
+    <div id="join-section" class="card">
+      <h2>Join a room</h2>
+      <p>Pick a username and choose a room to enter.</p>
+      <form id="join-form">
+        <input id="username" placeholder="Enter your username" maxlength="20" />
+        <select id="room">
+          <option value="general">General</option>
+          <option value="random">Random</option>
+          <option value="gaming">Gaming</option>
+        </select>
+        <button type="submit">Join Chat</button>
+      </form>
+    </div>
+
+    <div id="chat-container">
+      <div id="main-layout">
+        <div id="chat-panel" class="card">
+          <ul id="messages"></ul>
+
+          <form id="message-form">
+            <input id="input" autocomplete="off" placeholder="Type a room message..." />
+            <button type="submit">Send</button>
+          </form>
+        </div>
+
+        <aside id="sidebar" class="card">
+          <h3 class="sidebar-title">Online Users</h3>
+          <p class="sidebar-subtitle">Click a username to open actions.</p>
+          <ul id="users"></ul>
+        </aside>
+      </div>
+    </div>
   </div>
 
-  <div id="chat-container">
-    <div id="room-label"></div>
+  <div id="user-menu">
+    <div id="user-menu-header">User</div>
+    <button class="user-menu-btn" id="menu-pm-btn" type="button">Private Message</button>
+  </div>
 
-    <div id="main-layout">
-      <div id="chat-area">
-        <ul id="messages"></ul>
-
-        <form id="form">
-          <input id="input" autocomplete="off" placeholder="Type a room message..." />
-          <button type="submit">Send</button>
-        </form>
-      </div>
-
-      <div id="sidebar">
-        <h3>Online Users</h3>
-        <ul id="users"></ul>
-
-        <div id="pm-section">
-          <h3>Private Message</h3>
-          <select id="pm-target">
-            <option value="">Select a user</option>
-          </select>
-          <input id="pm-input" placeholder="Type a private message..." />
-          <button id="pm-button" type="button">Send Private Message</button>
-        </div>
+  <div id="pm-modal-overlay">
+    <div id="pm-modal">
+      <h3>Private Message</h3>
+      <p id="pm-modal-target-label">Send a message</p>
+      <textarea id="pm-message" placeholder="Type your private message..."></textarea>
+      <div class="pm-actions">
+        <button type="button" class="btn-secondary" id="pm-cancel-btn">Cancel</button>
+        <button type="button" id="pm-send-btn">Send Private Message</button>
       </div>
     </div>
   </div>
@@ -179,18 +490,28 @@
     const chatContainer = document.getElementById("chat-container");
     const roomLabel = document.getElementById("room-label");
 
-    const form = document.getElementById("form");
+    const messageForm = document.getElementById("message-form");
     const input = document.getElementById("input");
     const messages = document.getElementById("messages");
 
     const usersList = document.getElementById("users");
-    const pmTarget = document.getElementById("pm-target");
-    const pmInput = document.getElementById("pm-input");
-    const pmButton = document.getElementById("pm-button");
 
-    let currentUsername = "";
-    let currentRoom = "";
+    const userMenu = document.getElementById("user-menu");
+    const userMenuHeader = document.getElementById("user-menu-header");
+    const menuPmBtn = document.getElementById("menu-pm-btn");
+
+    const pmModalOverlay = document.getElementById("pm-modal-overlay");
+    const pmModalTargetLabel = document.getElementById("pm-modal-target-label");
+    const pmMessage = document.getElementById("pm-message");
+    const pmCancelBtn = document.getElementById("pm-cancel-btn");
+    const pmSendBtn = document.getElementById("pm-send-btn");
+
     let currentSocketId = "";
+    let selectedUser = null;
+
+    socket.on("connect", function () {
+      currentSocketId = socket.id;
+    });
 
     joinForm.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -200,9 +521,6 @@
 
       if (!username) return;
 
-      currentUsername = username;
-      currentRoom = room;
-
       socket.emit("join room", { username, room });
     });
 
@@ -210,10 +528,10 @@
       currentSocketId = data.socketId;
       joinSection.style.display = "none";
       chatContainer.style.display = "block";
-      roomLabel.textContent = `Room: ${data.room}`;
+      roomLabel.textContent = `Room: ${capitalize(data.room)} • ${data.username}`;
     });
 
-    form.addEventListener("submit", function (e) {
+    messageForm.addEventListener("submit", function (e) {
       e.preventDefault();
 
       const message = input.value.trim();
@@ -221,61 +539,173 @@
 
       socket.emit("chat message", message);
       input.value = "";
+      input.focus();
     });
 
-    pmButton.addEventListener("click", function () {
-      const toSocketId = pmTarget.value;
-      const message = pmInput.value.trim();
+    function capitalize(value) {
+      return value.charAt(0).toUpperCase() + value.slice(1);
+    }
 
-      if (!toSocketId || !message) return;
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
 
-      socket.emit("private message", { toSocketId, message });
-      pmInput.value = "";
-    });
+    function appendMessage(html, className = "") {
+      const item = document.createElement("li");
+      if (className) item.classList.add(className);
+      item.innerHTML = html;
+      messages.appendChild(item);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function appendChatMessage(data) {
+      appendMessage(`
+        <div class="message-row">
+          <span class="time">[${escapeHtml(data.time)}]</span>
+          <span class="username" data-socket-id="${escapeHtml(data.socketId)}" data-username="${escapeHtml(data.username)}">${escapeHtml(data.username)}</span>
+          <span class="message-text">${escapeHtml(data.message)}</span>
+        </div>
+      `);
+    }
+
+    function appendSystemMessage(data) {
+      appendMessage(`
+        <div class="message-row system">
+          <span class="time">[${escapeHtml(data.time)}]</span>
+          <span>${escapeHtml(data.message)}</span>
+        </div>
+      `, "system");
+    }
+
+    function appendPrivateMessage(data) {
+      appendMessage(`
+        <div class="message-row">
+          <span class="time">[${escapeHtml(data.time)}]</span>
+          <span class="username" data-socket-id="${escapeHtml(data.fromSocketId)}" data-username="${escapeHtml(data.from.replace(/^\(to /, "").replace(/\)$/, ""))}">${escapeHtml(data.from)}</span>
+          <span class="message-text">${escapeHtml(data.message)}</span>
+        </div>
+      `, "private");
+    }
 
     socket.on("chat message", function (data) {
-      const item = document.createElement("li");
-      item.innerHTML = `<span class="username">${data.username}:</span> ${data.message}`;
-      messages.appendChild(item);
-      messages.scrollTop = messages.scrollHeight;
+      appendChatMessage(data);
     });
 
-    socket.on("system message", function (msg) {
-      const item = document.createElement("li");
-      item.textContent = msg;
-      item.classList.add("system");
-      messages.appendChild(item);
-      messages.scrollTop = messages.scrollHeight;
+    socket.on("system message", function (data) {
+      appendSystemMessage(data);
     });
 
     socket.on("private message", function (data) {
-      const item = document.createElement("li");
-      item.innerHTML = `<span class="username">${data.from}:</span> ${data.message}`;
-      item.classList.add("private");
-      messages.appendChild(item);
-      messages.scrollTop = messages.scrollHeight;
+      appendPrivateMessage(data);
     });
 
     socket.on("user list", function (users) {
       usersList.innerHTML = "";
-      pmTarget.innerHTML = '<option value="">Select a user</option>';
 
-      users.forEach(function (user) {
-        if (user.socketId === currentSocketId) return;
+      const otherUsers = users.filter(user => user.socketId !== currentSocketId);
 
+      if (otherUsers.length === 0) {
+        usersList.innerHTML = `<li class="muted-empty">No other users in this room yet.</li>`;
+        return;
+      }
+
+      otherUsers.forEach(function (user) {
         const li = document.createElement("li");
-        li.textContent = user.username;
-        li.dataset.socketId = user.socketId;
-        li.addEventListener("click", function () {
-          pmTarget.value = user.socketId;
-        });
+        li.innerHTML = `
+          <span class="user-dot"></span>
+          <span class="user-name" data-socket-id="${escapeHtml(user.socketId)}" data-username="${escapeHtml(user.username)}">${escapeHtml(user.username)}</span>
+        `;
         usersList.appendChild(li);
-
-        const option = document.createElement("option");
-        option.value = user.socketId;
-        option.textContent = user.username;
-        pmTarget.appendChild(option);
       });
+    });
+
+    function openUserMenu(socketId, username, x, y) {
+      if (!socketId || socketId === currentSocketId) return;
+
+      selectedUser = { socketId, username };
+      userMenuHeader.textContent = username;
+
+      userMenu.style.display = "block";
+
+      const menuRect = userMenu.getBoundingClientRect();
+      const maxX = window.innerWidth - menuRect.width - 10;
+      const maxY = window.innerHeight - menuRect.height - 10;
+
+      userMenu.style.left = `${Math.min(x, maxX)}px`;
+      userMenu.style.top = `${Math.min(y, maxY)}px`;
+    }
+
+    function closeUserMenu() {
+      userMenu.style.display = "none";
+    }
+
+    function openPmModal() {
+      if (!selectedUser) return;
+      pmModalTargetLabel.textContent = `Send a private message to ${selectedUser.username}`;
+      pmMessage.value = "";
+      pmModalOverlay.style.display = "flex";
+      closeUserMenu();
+      setTimeout(() => pmMessage.focus(), 0);
+    }
+
+    function closePmModal() {
+      pmModalOverlay.style.display = "none";
+    }
+
+    menuPmBtn.addEventListener("click", function () {
+      openPmModal();
+    });
+
+    pmCancelBtn.addEventListener("click", function () {
+      closePmModal();
+    });
+
+    pmSendBtn.addEventListener("click", function () {
+      const message = pmMessage.value.trim();
+      if (!selectedUser || !message) return;
+
+      socket.emit("private message", {
+        toSocketId: selectedUser.socketId,
+        message
+      });
+
+      closePmModal();
+    });
+
+    pmMessage.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        closePmModal();
+      }
+    });
+
+    pmModalOverlay.addEventListener("click", function (e) {
+      if (e.target === pmModalOverlay) {
+        closePmModal();
+      }
+    });
+
+    document.addEventListener("click", function (e) {
+      const clickableUser = e.target.closest("[data-socket-id][data-username]");
+
+      if (clickableUser) {
+        const socketId = clickableUser.dataset.socketId;
+        const username = clickableUser.dataset.username;
+        openUserMenu(socketId, username, e.clientX, e.clientY);
+        return;
+      }
+
+      if (!e.target.closest("#user-menu")) {
+        closeUserMenu();
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        closeUserMenu();
+        closePmModal();
+      }
     });
   </script>
 </body>
