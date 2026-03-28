@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chat Room</title>
+  <title>ChatDude</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -47,7 +47,7 @@
   </style>
 </head>
 <body>
-  <h1>Chat Room</h1>
+  <h1>ChatDude</h1>
 
   <ul id="messages"></ul>
 
@@ -56,9 +56,9 @@
     <button type="submit">Send</button>
   </form>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
-    const socket = io();
+    const socket = io("https://chatdude-1091.onrender.com");
     const form = document.getElementById("form");
     const input = document.getElementById("input");
     const messages = document.getElementById("messages");
