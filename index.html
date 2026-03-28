@@ -68,12 +68,19 @@
 <body>
   <h1>ChatDude</h1>
 
-  <div id="join-section">
-    <form id="join-form">
-      <input id="username" placeholder="Enter your username" maxlength="20" />
-      <button type="submit">Join Chat</button>
-    </form>
-  </div>
+<div id="join-section">
+  <form id="join-form">
+    <input id="username" placeholder="Enter your username" maxlength="20" />
+
+    <select id="room">
+      <option value="general">General</option>
+      <option value="random">Random</option>
+      <option value="gaming">Gaming</option>
+    </select>
+
+    <button type="submit">Join Chat</button>
+  </form>
+</div>
 
   <div id="chat-container">
     <ul id="messages"></ul>
@@ -88,8 +95,9 @@
   <script>
     const socket = io("https://chatdude-1091.onrender.com");
 
-    const joinForm = document.getElementById("join-form");
-    const usernameInput = document.getElementById("username");
+	const joinForm = document.getElementById("join-form");
+	const usernameInput = document.getElementById("username");
+	const roomSelect = document.getElementById("room");
     const joinSection = document.getElementById("join-section");
     const chatContainer = document.getElementById("chat-container");
 
@@ -100,18 +108,18 @@
     let currentUsername = "";
 
     joinForm.addEventListener("submit", function (e) {
-      e.preventDefault();
+		e.preventDefault();
 
-      const username = usernameInput.value.trim();
-      if (!username) return;
+		const username = usernameInput.value.trim();
+		const room = roomSelect.value;
 
-      currentUsername = username;
-      socket.emit("set username", username);
+		if (!username) return;
 
-      joinSection.style.display = "none";
-      chatContainer.style.display = "block";
-    });
+		socket.emit("join room", { username, room });
 
+		joinSection.style.display = "none";
+		chatContainer.style.display = "block";
+	});
     form.addEventListener("submit", function (e) {
       e.preventDefault();
 

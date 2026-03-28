@@ -19,24 +19,27 @@ const users = {};
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  socket.on("set username", (username) => {
-    users[socket.id] = username;
+  socket.on("join room", ({ username, room }) => {
+    socket.join(room);
+    users[socket.id] = { username, room };
 
-    io.emit("system message", `${username} joined the chat`);
+    socket.to(room).emit("system message", `${username} joined the room`);
   });
 
   socket.on("chat message", (msg) => {
-    const username = users[socket.id] || "Anonymous";
-    io.emit("chat message", {
-      username,
+    const user = users[socket.id];
+    if (!user) return;
+
+    io.to(user.room).emit("chat message", {
+      username: user.username,
       message: msg
     });
   });
 
   socket.on("disconnect", () => {
-    const username = users[socket.id];
-    if (username) {
-      io.emit("system message", `${username} left the chat`);
+    const user = users[socket.id];
+    if (user) {
+      socket.to(user.room).emit("system message", `${user.username} left the room`);
       delete users[socket.id];
     }
 
