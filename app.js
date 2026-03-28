@@ -1397,6 +1397,8 @@
     );
     elements.menuCallAudioBtn.disabled = !canCall;
     elements.menuCallVideoBtn.disabled = !canCall;
+    elements.menuCallAudioBtn.title = canCall ? `Start a voice call with ${username}` : "Voice calling is unavailable right now";
+    elements.menuCallVideoBtn.title = canCall ? `Start a video call with ${username}` : "Video calling is unavailable right now";
     elements.menuFriendBtn.disabled = !state.me || state.me.isGuest;
     elements.menuFriendBtn.textContent = user && user.isFriend ? "Remove friend" : "Add friend";
     elements.menuBlockBtn.disabled = !state.me || state.me.isGuest;

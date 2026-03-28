@@ -149,6 +149,7 @@ button:active {
 
 body.has-split-call .page-shell {
   width: calc(50vw - 18px);
+  max-width: calc(50vw - 18px);
   margin: 0 auto 0 10px;
 }
 
@@ -842,7 +843,13 @@ body.has-split-call .chat-panel {
 }
 
 body.has-split-call .call-card.is-maximized {
-  inset: 10px 10px 10px calc(50vw + 6px);
+  inset: auto !important;
+  top: 10px !important;
+  right: 10px !important;
+  bottom: 10px !important;
+  left: calc(50vw + 6px) !important;
+  width: calc(50vw - 16px) !important;
+  height: calc(100vh - 20px) !important;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
