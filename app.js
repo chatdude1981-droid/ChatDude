@@ -123,7 +123,6 @@
     preferencesCancelBtn: document.getElementById("preferences-cancel-btn"),
     fontSelect: document.getElementById("font-select"),
     accentColorInput: document.getElementById("accent-color-input"),
-    bubbleColorInput: document.getElementById("bubble-color-input"),
     backgroundStyleSelect: document.getElementById("background-style-select"),
     allowGuestCameraView: document.getElementById("allow-guest-camera-view"),
     blockedUsersList: document.getElementById("blocked-users-list"),
@@ -245,24 +244,35 @@
 
   function applyPreferences() {
     const preferences = (state.me && state.me.preferences) || {
-      accentColor: "#38bdf8",
-      bubbleColor: "#1d4ed8",
+      textColor: "#edf4ff",
       fontFamily: "Space Grotesk",
       backgroundStyle: "aurora"
     };
 
-    document.documentElement.style.setProperty("--accent", preferences.accentColor);
-    document.documentElement.style.setProperty("--accent-strong", preferences.accentColor);
-    document.documentElement.style.setProperty("--bubble", preferences.bubbleColor);
-    document.documentElement.style.setProperty("--font-family", `"${preferences.fontFamily}", sans-serif`);
     document.body.dataset.backgroundStyle = preferences.backgroundStyle;
 
     elements.fontSelect.value = preferences.fontFamily;
-    elements.accentColorInput.value = preferences.accentColor;
-    elements.bubbleColorInput.value = preferences.bubbleColor;
+    elements.accentColorInput.value = preferences.textColor;
     elements.backgroundStyleSelect.value = preferences.backgroundStyle;
     elements.allowGuestCameraView.checked = preferences.privacy?.allowGuestCameraView !== false;
+    elements.messageInput.style.cssText = styleFromPreferences(preferences);
+    elements.pmWindowInput.style.cssText = styleFromPreferences(preferences);
     renderBlockedUsers();
+  }
+
+  function styleFromPreferences(preferences) {
+    const safe = preferences || {};
+    const style = [];
+
+    if (safe.fontFamily) {
+      style.push(`font-family: "${String(safe.fontFamily).replace(/"/g, "")}", sans-serif`);
+    }
+
+    if (safe.textColor) {
+      style.push(`color: ${safe.textColor}`);
+    }
+
+    return style.join("; ");
   }
 
   function renderBlockedUsers() {
@@ -601,6 +611,7 @@
         userButton.dataset.socketId = message.socketId || "";
         userButton.dataset.username = message.username || "";
         userButton.textContent = message.displayName || message.username || "User";
+        userButton.style.cssText = styleFromPreferences(message.preferences);
 
         const left = document.createElement("div");
         left.className = "message-meta";
@@ -629,6 +640,7 @@
       const text = document.createElement("div");
       text.className = "message-text";
       text.textContent = message.message;
+      text.style.cssText = styleFromPreferences(message.preferences);
       body.appendChild(text);
 
       if (canDeleteMessage(message)) {
@@ -674,7 +686,7 @@
           <span class="user-dot is-${escapeHtml(user.effectivePresenceStatus || "online")}"></span>
           ${isSelf ? `
             <div class="user-name-trigger is-self">
-              <span class="user-name-line">
+              <span class="user-name-line" style="${escapeHtml(styleFromPreferences(user.preferences))}">
                 <strong>${escapeHtml(user.displayName || user.username)}</strong>
                 <span class="user-badge-text">You</span>
                 ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
@@ -689,7 +701,7 @@
               data-socket-id="${escapeHtml(user.socketId)}"
               data-username="${escapeHtml(user.username)}"
             >
-              <span class="user-name-line">
+              <span class="user-name-line" style="${escapeHtml(styleFromPreferences(user.preferences))}">
                 <strong>${escapeHtml(user.displayName || user.username)}</strong>
                 ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
               </span>
@@ -773,6 +785,7 @@
           username,
           label: getConversationLabel(entry),
           message: entry.message,
+          preferences: entry.preferences || {},
           timestamp: entry.timestamp,
           time: entry.time,
           unread: Number(state.pmUnread[username] || 0)
@@ -815,10 +828,10 @@
       item.innerHTML = `
         <button type="button" class="pm-entry-button" data-open-pm-user="${escapeHtml(conversation.username)}">
           <div class="pm-entry-header">
-            <strong>${escapeHtml(conversation.label)}</strong>
+            <strong style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.label)}</strong>
             <span class="pm-meta">${escapeHtml(formatTime(conversation))}</span>
           </div>
-          <div class="message-text">${escapeHtml(conversation.message)}</div>
+          <div class="message-text" style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.message)}</div>
           ${conversation.unread ? `<span class="pm-unread-badge">${escapeHtml(conversation.unread)}</span>` : ""}
         </button>
       `;
@@ -851,10 +864,10 @@
       item.innerHTML = `
         <div class="pm-thread-bubble">
           <div class="pm-entry-header">
-            <strong>${escapeHtml(outgoing ? "You" : getConversationLabel(entry))}</strong>
+            <strong style="${escapeHtml(styleFromPreferences(entry.preferences))}">${escapeHtml(outgoing ? "You" : getConversationLabel(entry))}</strong>
             <span class="pm-meta">${escapeHtml(formatTime(entry))}</span>
           </div>
-          <div class="message-text">${escapeHtml(entry.message)}</div>
+          <div class="message-text" style="${escapeHtml(styleFromPreferences(entry.preferences))}">${escapeHtml(entry.message)}</div>
         </div>
       `;
       elements.pmThread.appendChild(item);
@@ -1850,8 +1863,7 @@
         body: {
           preferences: {
             fontFamily: elements.fontSelect.value,
-            accentColor: elements.accentColorInput.value,
-            bubbleColor: elements.bubbleColorInput.value,
+            textColor: elements.accentColorInput.value,
             backgroundStyle: elements.backgroundStyleSelect.value,
             privacy: {
               allowGuestCameraView: elements.allowGuestCameraView.checked

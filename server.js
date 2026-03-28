@@ -186,17 +186,30 @@ function findUserByUsername(username) {
 }
 
 function sanitizePreferences(preferences = {}) {
-  const fonts = ["Space Grotesk", "DM Sans", "Manrope", "IBM Plex Sans"];
+  const fonts = [
+    "Space Grotesk",
+    "DM Sans",
+    "Manrope",
+    "IBM Plex Sans",
+    "Outfit",
+    "Sora",
+    "Nunito",
+    "Plus Jakarta Sans",
+    "Bricolage Grotesque",
+    "Figtree"
+  ];
   const backgrounds = ["aurora", "midnight", "sunrise"];
   const privacy = preferences.privacy || {};
+  const textColor = /^#[0-9a-fA-F]{6}$/.test(preferences.textColor || "")
+    ? preferences.textColor
+    : (/^#[0-9a-fA-F]{6}$/.test(preferences.accentColor || "")
+      ? preferences.accentColor
+      : (/^#[0-9a-fA-F]{6}$/.test(preferences.bubbleColor || "")
+        ? preferences.bubbleColor
+        : "#edf4ff"));
 
   return {
-    accentColor: /^#[0-9a-fA-F]{6}$/.test(preferences.accentColor || "")
-      ? preferences.accentColor
-      : "#38bdf8",
-    bubbleColor: /^#[0-9a-fA-F]{6}$/.test(preferences.bubbleColor || "")
-      ? preferences.bubbleColor
-      : "#1d4ed8",
+    textColor,
     fontFamily: fonts.includes(preferences.fontFamily)
       ? preferences.fontFamily
       : "Space Grotesk",
@@ -298,6 +311,7 @@ function buildMessagePayload(message, socketIdOverride) {
     displayName: message.displayName || message.username,
     senderId: message.senderId || null,
     accountType: message.accountType || "guest",
+    preferences: sanitizePreferences(message.preferences || {}),
     socketId: socketIdOverride || message.socketId || null,
     time: message.time,
     timestamp: message.timestamp
@@ -321,6 +335,7 @@ function buildPrivateMessagePayload(message, viewerUsername) {
     counterpartLabel,
     fromSocketId: message.fromSocketId || null,
     toSocketId: message.toSocketId || null,
+    preferences: sanitizePreferences(message.preferences || {}),
     message: message.message,
     time: message.time,
     timestamp: message.timestamp
@@ -383,6 +398,7 @@ function getUsersInRoom(roomSlug, viewerSession) {
       displayName: session.displayName,
       accountType: session.accountType,
       isGuest: session.accountType === "guest",
+      preferences: sanitizePreferences(session.preferences || {}),
       presenceStatus: sanitizePresenceStatus(session.presenceStatus),
       effectivePresenceStatus: getEffectivePresenceStatus(session),
       isPublishing: Boolean(session.isPublishing),
@@ -465,6 +481,7 @@ async function createSystemMessage(roomSlug, text) {
     username: "ChatDude",
     displayName: "ChatDude",
     accountType: "system",
+    preferences: sanitizePreferences({}),
     senderId: "system",
     ...createTimestampPayload()
   };
@@ -850,6 +867,7 @@ io.on("connection", (socket) => {
       displayName: currentSession.displayName,
       senderId: currentSession.id,
       accountType: currentSession.accountType,
+      preferences: sanitizePreferences(currentSession.preferences || {}),
       socketId: socket.id,
       ...createTimestampPayload()
     };
@@ -911,6 +929,7 @@ io.on("connection", (socket) => {
       fromDisplayName: currentSession.displayName,
       toDisplayName: recipientSession.displayName,
       fromLabel: currentSession.username,
+      preferences: sanitizePreferences(currentSession.preferences || {}),
       message: trimmed.slice(0, 600),
       fromSocketId: socket.id,
       toSocketId,

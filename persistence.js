@@ -177,6 +177,11 @@ async function createPersistence(defaultRooms, options = {}) {
     `);
 
     await query(`
+      ALTER TABLE room_messages
+      ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
+    `);
+
+    await query(`
       CREATE TABLE IF NOT EXISTS private_messages (
         id TEXT PRIMARY KEY,
         from_user_id TEXT NOT NULL,
@@ -197,6 +202,11 @@ async function createPersistence(defaultRooms, options = {}) {
     await query(`
       CREATE INDEX IF NOT EXISTS private_messages_timestamp_idx
       ON private_messages (timestamp ASC);
+    `);
+
+    await query(`
+      ALTER TABLE private_messages
+      ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
     `);
   }
 
@@ -264,8 +274,8 @@ async function createPersistence(defaultRooms, options = {}) {
     for (const message of fileStore.roomMessages) {
       await query(
         `
-          INSERT INTO room_messages (id, kind, room_slug, message, username, display_name, sender_id, account_type, socket_id, time, timestamp)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          INSERT INTO room_messages (id, kind, room_slug, message, username, display_name, sender_id, account_type, socket_id, time, timestamp, preferences)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
           ON CONFLICT (id) DO NOTHING
         `,
         [
@@ -279,7 +289,8 @@ async function createPersistence(defaultRooms, options = {}) {
           message.accountType || "guest",
           message.socketId || null,
           message.time,
-          message.timestamp
+          message.timestamp,
+          toJson(message.preferences || {})
         ]
       );
     }
@@ -287,8 +298,8 @@ async function createPersistence(defaultRooms, options = {}) {
     for (const message of fileStore.privateMessages) {
       await query(
         `
-          INSERT INTO private_messages (id, from_user_id, to_user_id, from_username, to_username, from_display_name, to_display_name, from_label, message, from_socket_id, to_socket_id, time, timestamp)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          INSERT INTO private_messages (id, from_user_id, to_user_id, from_username, to_username, from_display_name, to_display_name, from_label, message, from_socket_id, to_socket_id, time, timestamp, preferences)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)
           ON CONFLICT (id) DO NOTHING
         `,
         [
@@ -304,7 +315,8 @@ async function createPersistence(defaultRooms, options = {}) {
           message.fromSocketId || null,
           message.toSocketId || null,
           message.time,
-          message.timestamp
+          message.timestamp,
+          toJson(message.preferences || {})
         ]
       );
     }
@@ -346,6 +358,7 @@ async function createPersistence(defaultRooms, options = {}) {
         displayName: row.display_name,
         senderId: row.sender_id,
         accountType: row.account_type,
+        preferences: fromJson(row.preferences, {}),
         socketId: row.socket_id,
         time: row.time,
         timestamp: new Date(row.timestamp).toISOString()
@@ -359,6 +372,7 @@ async function createPersistence(defaultRooms, options = {}) {
         fromDisplayName: row.from_display_name,
         toDisplayName: row.to_display_name,
         fromLabel: row.from_label,
+        preferences: fromJson(row.preferences, {}),
         message: row.message,
         fromSocketId: row.from_socket_id,
         toSocketId: row.to_socket_id,
@@ -432,8 +446,8 @@ async function createPersistence(defaultRooms, options = {}) {
     async saveRoomMessage(message) {
       await query(
         `
-          INSERT INTO room_messages (id, kind, room_slug, message, username, display_name, sender_id, account_type, socket_id, time, timestamp)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          INSERT INTO room_messages (id, kind, room_slug, message, username, display_name, sender_id, account_type, socket_id, time, timestamp, preferences)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
         `,
         [
           message.id,
@@ -446,7 +460,8 @@ async function createPersistence(defaultRooms, options = {}) {
           message.accountType || "guest",
           message.socketId || null,
           message.time,
-          message.timestamp
+          message.timestamp,
+          toJson(message.preferences || {})
         ]
       );
       await trimRoomMessages(message.roomSlug, store);
@@ -457,8 +472,8 @@ async function createPersistence(defaultRooms, options = {}) {
     async savePrivateMessage(message) {
       await query(
         `
-          INSERT INTO private_messages (id, from_user_id, to_user_id, from_username, to_username, from_display_name, to_display_name, from_label, message, from_socket_id, to_socket_id, time, timestamp)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          INSERT INTO private_messages (id, from_user_id, to_user_id, from_username, to_username, from_display_name, to_display_name, from_label, message, from_socket_id, to_socket_id, time, timestamp, preferences)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)
         `,
         [
           message.id,
@@ -473,7 +488,8 @@ async function createPersistence(defaultRooms, options = {}) {
           message.fromSocketId || null,
           message.toSocketId || null,
           message.time,
-          message.timestamp
+          message.timestamp,
+          toJson(message.preferences || {})
         ]
       );
       await trimPrivateMessages(store);
