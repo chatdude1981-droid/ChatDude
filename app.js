@@ -875,6 +875,18 @@
     });
   }
 
+  function canReplyToPmConversation(username) {
+    if (!username) {
+      return false;
+    }
+
+    if (state.me && state.me.canPrivateMessage) {
+      return true;
+    }
+
+    return getConversationEntries(username).length > 0;
+  }
+
   function getConversationTarget(username) {
     if (!username) {
       return null;
@@ -944,11 +956,6 @@
   function renderPmInbox() {
     elements.pmFeed.innerHTML = "";
     updateInboxCount();
-
-    if (state.me && state.me.isGuest) {
-      elements.pmFeed.innerHTML = '<li class="empty-state">Private messages unlock after creating an account.</li>';
-      return;
-    }
 
     const conversations = buildPmConversations();
     if (!conversations.length) {
@@ -1079,7 +1086,7 @@
     elements.pmWindowTitle.textContent = state.activePmUser.label || state.activePmUser.username;
 
     const targetUser = getConversationTarget(state.activePmUser.username);
-    const canPm = Boolean(state.me && state.me.canPrivateMessage);
+    const canPm = canReplyToPmConversation(state.activePmUser.username);
     const online = Boolean(targetUser && targetUser.socketId);
     const callDisabled = !canPm || !online;
 
@@ -2089,7 +2096,7 @@
     if (!state.selectedUser) return;
 
     if (!state.me || !state.me.canPrivateMessage) {
-      showToast("Create an account to unlock private messages.", "error");
+      showToast("Guests can reply to private messages, but only registered users can start them.", "error");
       return;
     }
 
@@ -2104,6 +2111,10 @@
     const message = elements.pmWindowInput.value.trim();
     const targetUser = state.activePmUser ? getConversationTarget(state.activePmUser.username) : null;
     if (!state.socket || !state.activePmUser || !targetUser || !targetUser.socketId || !message) return;
+    if (!canReplyToPmConversation(state.activePmUser.username)) {
+      showToast("Guests can only reply to private messages they have already received.", "error");
+      return;
+    }
 
     state.socket.emit("private message", {
       toSocketId: targetUser.socketId,

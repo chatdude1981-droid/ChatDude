@@ -369,6 +369,20 @@ function sessionBlocksUsername(session, username) {
   return blockedUsers.includes(username);
 }
 
+function hasPrivateConversationBetween(leftUsername, rightUsername) {
+  const left = normalizeUsername(String(leftUsername || "")).toLowerCase();
+  const right = normalizeUsername(String(rightUsername || "")).toLowerCase();
+  if (!left || !right) {
+    return false;
+  }
+
+  return store.privateMessages.some((entry) => {
+    const from = normalizeUsername(String(entry.fromUsername || "")).toLowerCase();
+    const to = normalizeUsername(String(entry.toUsername || "")).toLowerCase();
+    return (from === left && to === right) || (from === right && to === left);
+  });
+}
+
 function canViewerAccessPublisher(viewerSession, publisherSession) {
   if (!viewerSession || !publisherSession) {
     return false;
@@ -920,8 +934,11 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (currentSession.accountType !== "registered") {
-      socket.emit("error message", "Guests can join rooms, but private messages are for registered users.");
+    if (
+      currentSession.accountType !== "registered" &&
+      !hasPrivateConversationBetween(currentSession.username, recipientSession.username)
+    ) {
+      socket.emit("error message", "Guests can only reply to private messages they have already received.");
       return;
     }
 
