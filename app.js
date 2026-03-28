@@ -34,6 +34,7 @@
     remoteSettings: {},
     openMediaIds: new Set(),
     callLayout: {},
+    maximizedCallId: "",
     draggingCall: null,
     pmInboxOpen: false,
     pmUnread: {},
@@ -460,7 +461,7 @@
       const showVideo = participant.socketId === state.currentSocketId
         ? Boolean(state.localStream && state.cameraEnabled)
         : Boolean(remoteStream && participant.cameraEnabled);
-      card.className = `call-card${showVideo ? "" : " is-audio-only is-camera-off"}`;
+      card.className = `call-card${showVideo ? "" : " is-audio-only is-camera-off"}${state.maximizedCallId === participant.socketId ? " is-maximized" : ""}`;
       card.dataset.callSocketId = participant.socketId;
 
       const layout = clampCallLayout(
@@ -2095,7 +2096,42 @@
     }
 
     state.openMediaIds.delete(socketId);
+    if (state.maximizedCallId === socketId) {
+      state.maximizedCallId = "";
+    }
     closePeerConnection(socketId);
+    renderCallPanel();
+  }
+
+  function toggleCallFullscreen(socketId) {
+    if (!socketId) {
+      return;
+    }
+
+    const card = elements.callParticipants.querySelector(`[data-call-socket-id="${socketId}"]`);
+    const requestFullscreen = card && (
+      card.requestFullscreen ||
+      card.webkitRequestFullscreen ||
+      card.msRequestFullscreen
+    );
+
+    if (document.fullscreenElement && card && document.fullscreenElement === card) {
+      document.exitFullscreen?.().catch(function () {
+        state.maximizedCallId = state.maximizedCallId === socketId ? "" : socketId;
+        renderCallPanel();
+      });
+      return;
+    }
+
+    if (card && requestFullscreen) {
+      Promise.resolve(requestFullscreen.call(card)).catch(function () {
+        state.maximizedCallId = state.maximizedCallId === socketId ? "" : socketId;
+        renderCallPanel();
+      });
+      return;
+    }
+
+    state.maximizedCallId = state.maximizedCallId === socketId ? "" : socketId;
     renderCallPanel();
   }
 
@@ -2311,19 +2347,7 @@
 
       const fullscreenButton = event.target.closest("[data-call-fullscreen]");
       if (fullscreenButton) {
-        const card = fullscreenButton.closest("[data-call-socket-id]");
-        const target = card ? (card.querySelector("video") || card) : null;
-        const requestFullscreen = target && (
-          target.requestFullscreen ||
-          target.webkitRequestFullscreen ||
-          target.webkitEnterFullscreen ||
-          target.msRequestFullscreen
-        );
-        if (target && requestFullscreen) {
-          Promise.resolve(requestFullscreen.call(target)).catch(function () {
-            showToast("Fullscreen was blocked by the browser.", "error");
-          });
-        }
+        toggleCallFullscreen(fullscreenButton.dataset.callFullscreen);
         return;
       }
 
@@ -2489,6 +2513,12 @@
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") {
         sendActivityPing(true);
+      }
+    });
+    document.addEventListener("fullscreenchange", function () {
+      if (!document.fullscreenElement && state.maximizedCallId) {
+        state.maximizedCallId = "";
+        renderCallPanel();
       }
     });
 
