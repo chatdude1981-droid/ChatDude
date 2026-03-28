@@ -129,10 +129,25 @@
         </div>
 
         <div class="account-cluster">
+          <div class="pm-inbox-wrap">
+            <button id="open-inbox-btn" class="ghost-button icon-control" type="button" aria-label="Private messages" title="Private messages">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16v10H4z"></path>
+                <path d="m4 8 8 6 8-6"></path>
+              </svg>
+              <span id="inbox-count" class="inbox-count hidden">0</span>
+            </button>
+            <div id="pm-inbox-popover" class="pm-inbox-popover hidden">
+              <div class="pm-inbox-header">
+                <strong>Private messages</strong>
+                <span class="subtle-copy">Open a conversation.</span>
+              </div>
+              <ul id="pm-feed" class="pm-feed"></ul>
+            </div>
+          </div>
           <div id="account-badge" class="account-badge"></div>
           <button id="open-room-modal-btn" class="ghost-button hidden" type="button">New Room</button>
           <button id="delete-room-btn" class="ghost-button hidden" type="button">Delete Room</button>
-          <button id="open-preferences-btn" class="ghost-button hidden" type="button">Appearance</button>
           <button id="logout-btn" class="ghost-button" type="button">Leave</button>
         </div>
       </header>
@@ -165,6 +180,14 @@
 
             <form id="message-form" class="composer">
               <div class="composer-tools composer-tools-left">
+                <button id="open-preferences-inline-btn" class="ghost-button icon-control hidden" type="button" aria-label="Appearance settings" title="Appearance settings">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 3a2 2 0 0 1 2 2c0 .6-.2 1.17-.57 1.63A2 2 0 0 0 15 10h4a2 2 0 1 1 0 4h-1.5a2 2 0 0 0-1.88 2.68A2 2 0 1 1 13 19a2 2 0 0 0-2-2H8a5 5 0 1 1 0-10h4a2 2 0 0 0 0-4z"></path>
+                    <circle cx="7.5" cy="12.5" r="1"></circle>
+                    <circle cx="12" cy="8" r="1"></circle>
+                    <circle cx="16.5" cy="12" r="1"></circle>
+                  </svg>
+                </button>
                 <button id="join-audio-btn" class="ghost-button icon-control" type="button" aria-label="Publish camera" title="Publish camera">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M15 10.5 19.5 7v10L15 13.5"></path>
@@ -218,16 +241,6 @@
               </div>
             </div>
           </section>
-
-          <section class="card inbox-panel">
-            <div class="panel-heading">
-              <div>
-                <h3>Private inbox</h3>
-                <p>Recent private messages from this session.</p>
-              </div>
-            </div>
-            <ul id="pm-feed" class="pm-feed"></ul>
-          </section>
         </aside>
       </div>
     </section>
@@ -239,20 +252,53 @@
     <button id="menu-block-btn" class="menu-action" type="button">Block user</button>
   </div>
 
-  <div id="pm-modal-overlay" class="modal-overlay hidden">
-    <div class="modal card">
-      <div class="modal-header">
-        <div>
-          <span class="eyebrow">Private Message</span>
-          <h3 id="pm-modal-title">Start a direct message</h3>
-        </div>
-        <button id="pm-cancel-btn" class="icon-button" type="button">Close</button>
+  <div id="pm-window" class="pm-window card hidden">
+    <div class="pm-window-header" data-pm-drag-handle="true">
+      <div>
+        <span class="eyebrow">Private Message</span>
+        <h3 id="pm-window-title">Conversation</h3>
       </div>
-      <textarea id="pm-message" maxlength="600" placeholder="Write something thoughtful..."></textarea>
-      <div class="modal-actions">
-        <button id="pm-send-btn" type="button">Send message</button>
+      <div class="pm-window-actions">
+        <button id="pm-audio-btn" class="ghost-button icon-control" type="button" aria-label="Start private voice call" title="Start private voice call">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10a7 7 0 0 1-14 0"></path>
+            <path d="M12 17v4"></path>
+            <path d="M8 21h8"></path>
+          </svg>
+        </button>
+        <button id="pm-video-btn" class="ghost-button icon-control" type="button" aria-label="Start private video call" title="Start private video call">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+            <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+          </svg>
+        </button>
+        <button id="pm-end-call-btn" class="ghost-button icon-control hidden" type="button" aria-label="End private call" title="End private call">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 5 19 19"></path>
+            <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+            <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+          </svg>
+        </button>
+        <button id="pm-window-close-btn" class="icon-button" type="button">Close</button>
       </div>
     </div>
+    <div id="pm-request-banner" class="pm-request-banner hidden"></div>
+    <div id="pm-window-media" class="pm-window-media hidden">
+      <div id="pm-remote-media-card" class="pm-media-card remote">
+        <div class="pm-media-label">Them</div>
+        <div id="pm-remote-media-stage" class="pm-media-stage"></div>
+      </div>
+      <div id="pm-local-media-card" class="pm-media-card local">
+        <div class="pm-media-label">You</div>
+        <div id="pm-local-media-stage" class="pm-media-stage"></div>
+      </div>
+    </div>
+    <ul id="pm-thread" class="pm-thread"></ul>
+    <form id="pm-window-form" class="pm-window-form">
+      <textarea id="pm-window-input" maxlength="600" placeholder="Write a private message..."></textarea>
+      <button id="pm-send-btn" type="submit">Send</button>
+    </form>
   </div>
 
   <div id="room-modal-overlay" class="modal-overlay hidden">

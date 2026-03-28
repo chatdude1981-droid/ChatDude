@@ -316,12 +316,23 @@ function buildMessagePayload(message, socketIdOverride) {
   };
 }
 
-function buildPrivateMessagePayload(message, socketIdOverride) {
+function buildPrivateMessagePayload(message, viewerUsername) {
+  const isOutgoing = message.fromUsername === viewerUsername;
+  const counterpartUsername = isOutgoing ? message.toUsername : message.fromUsername;
+  const counterpartLabel = isOutgoing
+    ? (message.toDisplayName || message.toUsername)
+    : (message.fromDisplayName || message.fromUsername);
+
   return {
     id: message.id,
+    direction: isOutgoing ? "outgoing" : "incoming",
     from: message.fromLabel,
     fromUsername: message.fromUsername,
-    fromSocketId: socketIdOverride || message.fromSocketId || null,
+    toUsername: message.toUsername,
+    counterpartUsername,
+    counterpartLabel,
+    fromSocketId: message.fromSocketId || null,
+    toSocketId: message.toSocketId || null,
     message: message.message,
     time: message.time,
     timestamp: message.timestamp
@@ -899,19 +910,72 @@ io.on("connection", (socket) => {
       toUserId: recipientSession.id,
       fromUsername: currentSession.username,
       toUsername: recipientSession.username,
+      fromDisplayName: currentSession.displayName,
+      toDisplayName: recipientSession.displayName,
       fromLabel: currentSession.username,
       message: trimmed.slice(0, 600),
       fromSocketId: socket.id,
+      toSocketId,
       ...createTimestampPayload()
     };
 
     savePrivateMessage(entry);
 
-    io.to(toSocketId).emit("private message", buildPrivateMessagePayload(entry, socket.id));
+    io.to(toSocketId).emit("private message", buildPrivateMessagePayload(entry, recipientSession.username));
     socket.emit("private message", buildPrivateMessagePayload({
       ...entry,
       fromLabel: `(to ${recipientSession.username})`
-    }, toSocketId));
+    }, currentSession.username));
+  });
+
+  socket.on("pm media request", ({ toSocketId, mode }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession) return;
+    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
+    if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
+    if (!["audio", "video"].includes(mode)) return;
+
+    io.to(toSocketId).emit("pm media request", {
+      fromSocketId: socket.id,
+      fromUsername: currentSession.username,
+      fromDisplayName: currentSession.displayName,
+      mode
+    });
+  });
+
+  socket.on("pm media accept", ({ toSocketId, mode }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession) return;
+    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
+    if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
+
+    io.to(toSocketId).emit("pm media accept", {
+      fromSocketId: socket.id,
+      mode: mode === "video" ? "video" : "audio"
+    });
+  });
+
+  socket.on("pm media decline", ({ toSocketId }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession) return;
+
+    io.to(toSocketId).emit("pm media decline", {
+      fromSocketId: socket.id,
+      fromUsername: currentSession.username
+    });
+  });
+
+  socket.on("pm media end", ({ toSocketId }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession) return;
+
+    io.to(toSocketId).emit("pm media end", {
+      fromSocketId: socket.id
+    });
   });
 
   socket.on("start publishing", () => {
@@ -1003,6 +1067,46 @@ io.on("connection", (socket) => {
     if (currentSession.roomSlug !== targetSession.roomSlug) return;
 
     io.to(toSocketId).emit("webrtc ice candidate", {
+      fromSocketId: socket.id,
+      candidate
+    });
+  });
+
+  socket.on("pm webrtc offer", ({ toSocketId, description, mode }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession || !description) return;
+    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
+    if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
+
+    io.to(toSocketId).emit("pm webrtc offer", {
+      fromSocketId: socket.id,
+      description,
+      mode: mode === "video" ? "video" : "audio",
+      user: {
+        username: currentSession.username,
+        displayName: currentSession.displayName
+      }
+    });
+  });
+
+  socket.on("pm webrtc answer", ({ toSocketId, description }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession || !description) return;
+
+    io.to(toSocketId).emit("pm webrtc answer", {
+      fromSocketId: socket.id,
+      description
+    });
+  });
+
+  socket.on("pm webrtc ice candidate", ({ toSocketId, candidate }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    const targetSession = onlineUsers.get(toSocketId);
+    if (!currentSession || !targetSession || !candidate) return;
+
+    io.to(toSocketId).emit("pm webrtc ice candidate", {
       fromSocketId: socket.id,
       candidate
     });

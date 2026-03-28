@@ -33,7 +33,22 @@
     remoteSettings: {},
     openMediaIds: new Set(),
     callLayout: {},
-    draggingCall: null
+    draggingCall: null,
+    pmInboxOpen: false,
+    pmUnread: {},
+    activePmUser: null,
+    pmWindowPosition: { x: 96, y: 132 },
+    draggingPmWindow: null,
+    pmCall: {
+      targetSocketId: "",
+      targetUsername: "",
+      mode: "",
+      localStream: null,
+      remoteStream: null,
+      peerConnection: null,
+      incomingRequest: null,
+      pendingRequest: null
+    }
   };
 
   const CALL_CARD_WIDTH = 196;
@@ -58,9 +73,12 @@
     sessionTitle: document.getElementById("session-title"),
     activeRoomPill: document.getElementById("active-room-pill"),
     accountBadge: document.getElementById("account-badge"),
+    openInboxBtn: document.getElementById("open-inbox-btn"),
+    inboxCount: document.getElementById("inbox-count"),
+    pmInboxPopover: document.getElementById("pm-inbox-popover"),
     openRoomModalBtn: document.getElementById("open-room-modal-btn"),
     deleteRoomBtn: document.getElementById("delete-room-btn"),
-    openPreferencesBtn: document.getElementById("open-preferences-btn"),
+    openPreferencesInlineBtn: document.getElementById("open-preferences-inline-btn"),
     logoutBtn: document.getElementById("logout-btn"),
     guestUpgradeCard: document.getElementById("guest-upgrade-card"),
     roomList: document.getElementById("room-list"),
@@ -83,10 +101,19 @@
     userMenuHeader: document.getElementById("user-menu-header"),
     menuPmBtn: document.getElementById("menu-pm-btn"),
     menuBlockBtn: document.getElementById("menu-block-btn"),
-    pmModalOverlay: document.getElementById("pm-modal-overlay"),
-    pmModalTitle: document.getElementById("pm-modal-title"),
-    pmMessage: document.getElementById("pm-message"),
-    pmCancelBtn: document.getElementById("pm-cancel-btn"),
+    pmWindow: document.getElementById("pm-window"),
+    pmWindowTitle: document.getElementById("pm-window-title"),
+    pmWindowCloseBtn: document.getElementById("pm-window-close-btn"),
+    pmRequestBanner: document.getElementById("pm-request-banner"),
+    pmWindowMedia: document.getElementById("pm-window-media"),
+    pmRemoteMediaStage: document.getElementById("pm-remote-media-stage"),
+    pmLocalMediaStage: document.getElementById("pm-local-media-stage"),
+    pmAudioBtn: document.getElementById("pm-audio-btn"),
+    pmVideoBtn: document.getElementById("pm-video-btn"),
+    pmEndCallBtn: document.getElementById("pm-end-call-btn"),
+    pmThread: document.getElementById("pm-thread"),
+    pmWindowForm: document.getElementById("pm-window-form"),
+    pmWindowInput: document.getElementById("pm-window-input"),
     pmSendBtn: document.getElementById("pm-send-btn"),
     roomModalOverlay: document.getElementById("room-modal-overlay"),
     roomForm: document.getElementById("room-form"),
@@ -273,7 +300,7 @@
     `;
 
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
-    elements.openPreferencesBtn.classList.toggle("hidden", !state.me.canCustomize);
+    elements.openPreferencesInlineBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
     elements.joinAudioBtn.disabled = state.isPublishing;
     elements.leaveCallBtn.disabled = !state.isPublishing;
@@ -287,6 +314,8 @@
       : "Publish your camera first";
     elements.pushToTalkBtn.textContent = state.micEnabled ? "Mute" : "Unmute";
     elements.pushToTalkBtn.classList.toggle("is-active", state.isPublishing && !state.micEnabled);
+    renderPmInbox();
+    renderPmWindow();
   }
 
   function canManageActiveRoom() {
@@ -664,31 +693,235 @@
     });
   }
 
-  function renderPmFeed() {
+  function getConversationUsername(entry) {
+    if (entry.counterpartUsername) {
+      return entry.counterpartUsername;
+    }
+
+    if (entry.direction === "incoming") {
+      return entry.fromUsername || "";
+    }
+
+    if (entry.direction === "outgoing" && entry.toUsername) {
+      return entry.toUsername;
+    }
+
+    const match = String(entry.from || "").match(/^\(to ([^)]+)\)$/);
+    return match ? match[1] : "";
+  }
+
+  function getConversationLabel(entry) {
+    return entry.counterpartLabel || getConversationUsername(entry) || "Conversation";
+  }
+
+  function getConversationEntries(username) {
+    if (!username) {
+      return [];
+    }
+
+    return state.pmFeed.filter(function (entry) {
+      return getConversationUsername(entry) === username;
+    });
+  }
+
+  function getConversationTarget(username) {
+    if (!username) {
+      return null;
+    }
+
+    return state.users.find(function (user) {
+      return user.username === username;
+    }) || null;
+  }
+
+  function buildPmConversations() {
+    const map = new Map();
+
+    state.pmFeed.forEach(function (entry) {
+      const username = getConversationUsername(entry);
+      if (!username) {
+        return;
+      }
+
+      const existing = map.get(username);
+      if (!existing || new Date(entry.timestamp || 0).getTime() >= new Date(existing.timestamp || 0).getTime()) {
+        map.set(username, {
+          username,
+          label: getConversationLabel(entry),
+          message: entry.message,
+          timestamp: entry.timestamp,
+          time: entry.time,
+          unread: Number(state.pmUnread[username] || 0)
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort(function (left, right) {
+      return new Date(right.timestamp || 0).getTime() - new Date(left.timestamp || 0).getTime();
+    });
+  }
+
+  function updateInboxCount() {
+    const totalUnread = Object.values(state.pmUnread).reduce(function (sum, count) {
+      return sum + Number(count || 0);
+    }, 0);
+
+    elements.inboxCount.textContent = String(totalUnread);
+    elements.inboxCount.classList.toggle("hidden", totalUnread < 1);
+  }
+
+  function renderPmInbox() {
     elements.pmFeed.innerHTML = "";
+    updateInboxCount();
 
     if (state.me && state.me.isGuest) {
       elements.pmFeed.innerHTML = '<li class="empty-state">Private messages unlock after creating an account.</li>';
       return;
     }
 
-    if (!state.pmFeed.length) {
-      elements.pmFeed.innerHTML = '<li class="empty-state">Private conversations from this session show up here.</li>';
+    const conversations = buildPmConversations();
+    if (!conversations.length) {
+      elements.pmFeed.innerHTML = '<li class="empty-state">Your private conversations will show up here.</li>';
       return;
     }
 
-    state.pmFeed.slice(-10).reverse().forEach(function (entry) {
+    conversations.forEach(function (conversation) {
       const item = document.createElement("li");
       item.className = "pm-entry";
       item.innerHTML = `
-        <div class="pm-entry-header">
-          <strong>${escapeHtml(entry.from)}</strong>
-          <span class="pm-meta">${escapeHtml(formatTime(entry))}</span>
-        </div>
-        <div class="message-text">${escapeHtml(entry.message)}</div>
+        <button type="button" class="pm-entry-button" data-open-pm-user="${escapeHtml(conversation.username)}">
+          <div class="pm-entry-header">
+            <strong>${escapeHtml(conversation.label)}</strong>
+            <span class="pm-meta">${escapeHtml(formatTime(conversation))}</span>
+          </div>
+          <div class="message-text">${escapeHtml(conversation.message)}</div>
+          ${conversation.unread ? `<span class="pm-unread-badge">${escapeHtml(conversation.unread)}</span>` : ""}
+        </button>
       `;
       elements.pmFeed.appendChild(item);
     });
+  }
+
+  function renderPmThread() {
+    elements.pmThread.innerHTML = "";
+
+    if (!state.activePmUser) {
+      elements.pmThread.innerHTML = '<li class="empty-state">Choose a conversation from the envelope or a user menu.</li>';
+      return;
+    }
+
+    const entries = getConversationEntries(state.activePmUser.username);
+    if (!entries.length) {
+      elements.pmThread.innerHTML = '<li class="empty-state">No private messages yet. Say hello.</li>';
+      return;
+    }
+
+    entries.forEach(function (entry) {
+      const item = document.createElement("li");
+      const outgoing = entry.direction === "outgoing" || Boolean(
+        state.me &&
+        entry.fromUsername === state.me.username &&
+        getConversationUsername(entry) === state.activePmUser.username
+      );
+      item.className = `pm-thread-item${outgoing ? " is-outgoing" : ""}`;
+      item.innerHTML = `
+        <div class="pm-thread-bubble">
+          <div class="pm-entry-header">
+            <strong>${escapeHtml(outgoing ? "You" : getConversationLabel(entry))}</strong>
+            <span class="pm-meta">${escapeHtml(formatTime(entry))}</span>
+          </div>
+          <div class="message-text">${escapeHtml(entry.message)}</div>
+        </div>
+      `;
+      elements.pmThread.appendChild(item);
+    });
+
+    elements.pmThread.scrollTop = elements.pmThread.scrollHeight;
+  }
+
+  function renderPmRequestBanner() {
+    const request = state.pmCall.incomingRequest;
+    if (!request || !state.activePmUser || request.fromUsername !== state.activePmUser.username) {
+      elements.pmRequestBanner.classList.add("hidden");
+      elements.pmRequestBanner.innerHTML = "";
+      return;
+    }
+
+    elements.pmRequestBanner.classList.remove("hidden");
+    elements.pmRequestBanner.innerHTML = `
+      <span>${escapeHtml(request.fromDisplayName || request.fromUsername)} wants to start a private ${escapeHtml(request.mode)} chat.</span>
+      <div class="pm-request-actions">
+        <button type="button" class="ghost-button" data-accept-pm-call="true">Accept</button>
+        <button type="button" class="ghost-button" data-decline-pm-call="true">Decline</button>
+      </div>
+    `;
+  }
+
+  function renderPmMedia() {
+    const hasCall = Boolean(state.pmCall.localStream || state.pmCall.remoteStream || state.pmCall.pendingRequest);
+    elements.pmWindowMedia.classList.toggle("hidden", !hasCall);
+    elements.pmEndCallBtn.classList.toggle("hidden", !hasCall);
+
+    elements.pmLocalMediaStage.innerHTML = "";
+    elements.pmRemoteMediaStage.innerHTML = "";
+
+    if (state.pmCall.localStream) {
+      const localHasVideo = state.pmCall.localStream.getVideoTracks().some(function (track) {
+        return track.enabled;
+      });
+      if (localHasVideo) {
+        const video = document.createElement("video");
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        video.srcObject = state.pmCall.localStream;
+        elements.pmLocalMediaStage.appendChild(video);
+      } else {
+        elements.pmLocalMediaStage.innerHTML = `<div class="pm-media-avatar">${escapeHtml(initialFromName(state.me?.displayName || state.me?.username))}</div>`;
+      }
+    }
+
+    if (state.pmCall.remoteStream) {
+      const remoteHasVideo = state.pmCall.remoteStream.getVideoTracks().length > 0;
+      if (remoteHasVideo) {
+        const video = document.createElement("video");
+        video.autoplay = true;
+        video.playsInline = true;
+        video.srcObject = state.pmCall.remoteStream;
+        elements.pmRemoteMediaStage.appendChild(video);
+      } else {
+        elements.pmRemoteMediaStage.innerHTML = `<div class="pm-media-avatar">${escapeHtml(initialFromName(state.activePmUser?.label || state.activePmUser?.username))}</div>`;
+      }
+    }
+  }
+
+  function renderPmWindow() {
+    const isOpen = Boolean(state.activePmUser);
+    elements.pmWindow.classList.toggle("hidden", !isOpen);
+
+    if (!isOpen) {
+      return;
+    }
+
+    elements.pmWindow.style.left = `${state.pmWindowPosition.x}px`;
+    elements.pmWindow.style.top = `${state.pmWindowPosition.y}px`;
+    elements.pmWindowTitle.textContent = state.activePmUser.label || state.activePmUser.username;
+
+    const targetUser = getConversationTarget(state.activePmUser.username);
+    const canPm = Boolean(state.me && state.me.canPrivateMessage);
+    const online = Boolean(targetUser && targetUser.socketId);
+    const callDisabled = !canPm || !online;
+
+    elements.pmWindowInput.disabled = !canPm || !online;
+    elements.pmSendBtn.disabled = !canPm || !online;
+    elements.pmAudioBtn.disabled = callDisabled;
+    elements.pmVideoBtn.disabled = callDisabled;
+    elements.pmAudioBtn.title = callDisabled ? "User must be online to start a private call" : "Start private voice call";
+    elements.pmVideoBtn.title = callDisabled ? "User must be online to start a private call" : "Start private video call";
+
+    renderPmThread();
+    renderPmRequestBanner();
+    renderPmMedia();
   }
 
   function renderTyping() {
@@ -921,6 +1154,218 @@
     overlay.classList.add("hidden");
   }
 
+  function clampPmWindowPosition(position) {
+    const maxX = Math.max(12, window.innerWidth - 430);
+    const maxY = Math.max(80, window.innerHeight - 540);
+
+    return {
+      x: Math.min(Math.max(position.x, 12), maxX),
+      y: Math.min(Math.max(position.y, 72), maxY)
+    };
+  }
+
+  function openPmInbox() {
+    state.pmInboxOpen = !state.pmInboxOpen;
+    elements.pmInboxPopover.classList.toggle("hidden", !state.pmInboxOpen);
+  }
+
+  function closePmInbox() {
+    state.pmInboxOpen = false;
+    elements.pmInboxPopover.classList.add("hidden");
+  }
+
+  function openPmConversation(userLike) {
+    if (!userLike || !userLike.username) {
+      return;
+    }
+
+    state.activePmUser = {
+      username: userLike.username,
+      label: userLike.displayName || userLike.label || userLike.username,
+      socketId: userLike.socketId || (getConversationTarget(userLike.username) || {}).socketId || ""
+    };
+    delete state.pmUnread[userLike.username];
+    updateInboxCount();
+    renderPmInbox();
+    renderPmWindow();
+    closePmInbox();
+    closeUserMenu();
+    window.setTimeout(function () {
+      elements.pmWindowInput.focus();
+    }, 0);
+  }
+
+  function closePmWindow() {
+    state.activePmUser = null;
+    state.pmCall.incomingRequest = null;
+    renderPmWindow();
+  }
+
+  function closePmCall() {
+    if (state.pmCall.peerConnection) {
+      state.pmCall.peerConnection.close();
+    }
+
+    if (state.pmCall.localStream) {
+      state.pmCall.localStream.getTracks().forEach(function (track) {
+        track.stop();
+      });
+    }
+
+    state.pmCall = {
+      targetSocketId: "",
+      targetUsername: "",
+      mode: "",
+      localStream: null,
+      remoteStream: null,
+      peerConnection: null,
+      incomingRequest: null,
+      pendingRequest: null
+    };
+    renderPmWindow();
+  }
+
+  function endPmCall(announce) {
+    if (announce !== false && state.socket && state.pmCall.targetSocketId) {
+      state.socket.emit("pm media end", {
+        toSocketId: state.pmCall.targetSocketId
+      });
+    }
+
+    closePmCall();
+  }
+
+  function createPmPeerConnection(targetSocketId, mode) {
+    if (state.pmCall.peerConnection) {
+      return state.pmCall.peerConnection;
+    }
+
+    const connection = new RTCPeerConnection(getRtcConfig());
+    if (state.pmCall.localStream) {
+      state.pmCall.localStream.getTracks().forEach(function (track) {
+        connection.addTrack(track, state.pmCall.localStream);
+      });
+    }
+
+    connection.onicecandidate = function (event) {
+      if (event.candidate && state.socket) {
+        state.socket.emit("pm webrtc ice candidate", {
+          toSocketId: targetSocketId,
+          candidate: event.candidate
+        });
+      }
+    };
+
+    connection.ontrack = function (event) {
+      state.pmCall.remoteStream = event.streams && event.streams[0]
+        ? event.streams[0]
+        : new MediaStream([event.track]);
+      renderPmWindow();
+    };
+
+    connection.onconnectionstatechange = function () {
+      if (["closed", "failed", "disconnected"].includes(connection.connectionState)) {
+        closePmCall();
+      }
+    };
+
+    state.pmCall.peerConnection = connection;
+    state.pmCall.targetSocketId = targetSocketId;
+    state.pmCall.mode = mode;
+    return connection;
+  }
+
+  async function ensurePmLocalStream(mode) {
+    if (state.pmCall.localStream) {
+      return state.pmCall.localStream;
+    }
+
+    if (!window.isSecureContext) {
+      throw new Error("Voice and video need HTTPS or localhost to access devices.");
+    }
+
+    if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) {
+      throw new Error("This browser does not support private voice/video chat.");
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: mode === "video" ? { facingMode: "user" } : false
+    });
+    state.pmCall.localStream = stream;
+    state.pmCall.mode = mode;
+    renderPmWindow();
+    return stream;
+  }
+
+  async function startPmCall(mode) {
+    if (!state.socket || !state.activePmUser || !state.me || !state.me.canPrivateMessage) {
+      showToast("Private calls are available for registered users.", "error");
+      return;
+    }
+
+    const targetUser = getConversationTarget(state.activePmUser.username);
+    if (!targetUser || !targetUser.socketId) {
+      showToast("That user is not online right now.", "error");
+      return;
+    }
+
+    try {
+      endPmCall(false);
+      await ensurePmLocalStream(mode);
+      state.pmCall.targetSocketId = targetUser.socketId;
+      state.pmCall.targetUsername = targetUser.username;
+      state.pmCall.pendingRequest = {
+        socketId: targetUser.socketId,
+        mode
+      };
+      renderPmWindow();
+      state.socket.emit("pm media request", {
+        toSocketId: targetUser.socketId,
+        mode
+      });
+      showToast(`Private ${mode} request sent to ${targetUser.username}.`, "success");
+    } catch (error) {
+      closePmCall();
+      showToast(error.message || "Unable to start a private call.", "error");
+    }
+  }
+
+  async function acceptPmCall() {
+    const request = state.pmCall.incomingRequest;
+    if (!request || !state.socket) {
+      return;
+    }
+
+    try {
+      endPmCall(false);
+      await ensurePmLocalStream(request.mode);
+      state.pmCall.targetSocketId = request.fromSocketId;
+      state.pmCall.targetUsername = request.fromUsername;
+      state.pmCall.incomingRequest = null;
+      renderPmWindow();
+      state.socket.emit("pm media accept", {
+        toSocketId: request.fromSocketId,
+        mode: request.mode
+      });
+    } catch (error) {
+      showToast(error.message || "Unable to join the private call.", "error");
+    }
+  }
+
+  function declinePmCall() {
+    const request = state.pmCall.incomingRequest;
+    if (!request || !state.socket) {
+      return;
+    }
+
+    state.socket.emit("pm media decline", {
+      toSocketId: request.fromSocketId
+    });
+    state.pmCall.incomingRequest = null;
+    renderPmWindow();
+  }
+
   function showChatShell() {
     elements.authShell.classList.add("hidden");
     elements.chatShell.classList.remove("hidden");
@@ -928,7 +1373,8 @@
     renderRooms();
     renderMessages();
     renderUsers();
-    renderPmFeed();
+    renderPmInbox();
+    renderPmWindow();
     renderTyping();
     renderCallPanel();
     applyPreferences();
@@ -943,6 +1389,7 @@
   function connectSocket(authPayload) {
     if (state.socket) {
       leaveCall(false);
+      endPmCall(false);
       state.socket.disconnect();
       state.socket = null;
     }
@@ -961,7 +1408,8 @@
       applyPreferences();
       renderAccount();
       renderRooms();
-      renderPmFeed();
+      renderPmInbox();
+      renderPmWindow();
       showChatShell();
 
       const desiredRoom = roomBySlug(state.activeRoom) ? state.activeRoom : (state.rooms[0] && state.rooms[0].slug);
@@ -1008,6 +1456,7 @@
     socket.on("user list", function (users) {
       state.users = users;
       renderUsers();
+      renderPmWindow();
     });
 
     socket.on("typing update", function (typingUsers) {
@@ -1029,8 +1478,12 @@
     socket.on("private message", function (payload) {
       state.pmFeed.push(payload);
       savePmFeed();
-      renderPmFeed();
-      showToast(`Private message: ${payload.from}`, "success");
+      if (payload.direction === "incoming" && payload.counterpartUsername !== state.activePmUser?.username) {
+        state.pmUnread[payload.counterpartUsername] = Number(state.pmUnread[payload.counterpartUsername] || 0) + 1;
+      }
+      renderPmInbox();
+      renderPmWindow();
+      showToast(`Private message: ${payload.counterpartLabel || payload.from}`, "success");
     });
 
     socket.on("preferences updated", function (preferences) {
@@ -1057,6 +1510,93 @@
       }
 
       await createOfferForParticipant(payload.viewerSocketId);
+    });
+
+    socket.on("pm media request", function (payload) {
+      state.pmCall.incomingRequest = payload;
+      openPmConversation({
+        username: payload.fromUsername,
+        displayName: payload.fromDisplayName,
+        socketId: payload.fromSocketId
+      });
+      showToast(`${payload.fromDisplayName || payload.fromUsername} wants to start a private ${payload.mode} chat.`, "success");
+    });
+
+    socket.on("pm media accept", async function (payload) {
+      if (!state.pmCall.localStream) {
+        return;
+      }
+
+      state.pmCall.pendingRequest = null;
+      state.pmCall.targetSocketId = payload.fromSocketId;
+      try {
+        const connection = createPmPeerConnection(payload.fromSocketId, payload.mode);
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+        socket.emit("pm webrtc offer", {
+          toSocketId: payload.fromSocketId,
+          description: connection.localDescription,
+          mode: payload.mode
+        });
+      } catch (error) {
+        closePmCall();
+        showToast(error.message || "Private call setup failed.", "error");
+      }
+    });
+
+    socket.on("pm media decline", function (payload) {
+      if (payload.fromSocketId === state.pmCall.targetSocketId || state.pmCall.pendingRequest) {
+        closePmCall();
+        showToast(`${payload.fromUsername || "That user"} declined the private call.`, "error");
+      }
+    });
+
+    socket.on("pm media end", function (payload) {
+      if (payload.fromSocketId === state.pmCall.targetSocketId) {
+        closePmCall();
+        showToast("Private call ended.", "success");
+      }
+    });
+
+    socket.on("pm webrtc offer", async function (payload) {
+      if (!state.pmCall.localStream) {
+        return;
+      }
+
+      try {
+        state.pmCall.targetSocketId = payload.fromSocketId;
+        const connection = createPmPeerConnection(payload.fromSocketId, payload.mode);
+        await connection.setRemoteDescription(new RTCSessionDescription(payload.description));
+        const answer = await connection.createAnswer();
+        await connection.setLocalDescription(answer);
+        socket.emit("pm webrtc answer", {
+          toSocketId: payload.fromSocketId,
+          description: connection.localDescription
+        });
+      } catch (error) {
+        closePmCall();
+        showToast(error.message || "Unable to answer the private call.", "error");
+      }
+    });
+
+    socket.on("pm webrtc answer", async function (payload) {
+      if (!state.pmCall.peerConnection) {
+        return;
+      }
+
+      await state.pmCall.peerConnection.setRemoteDescription(new RTCSessionDescription(payload.description));
+    });
+
+    socket.on("pm webrtc ice candidate", async function (payload) {
+      if (!state.pmCall.peerConnection) {
+        return;
+      }
+
+      try {
+        await state.pmCall.peerConnection.addIceCandidate(new RTCIceCandidate(payload.candidate));
+      } catch (_error) {
+        showToast("A private-call network candidate was skipped.", "error");
+      }
     });
 
     socket.on("webrtc offer", async function (payload) {
@@ -1169,7 +1709,7 @@
     const savedGuestName = localStorage.getItem(storageKeys.guestName) || "";
     elements.guestName.value = savedGuestName;
     renderRooms();
-    renderPmFeed();
+    renderPmInbox();
 
     if (!state.token && savedGuestName && state.rooms.length) {
       connectSocket({ guestName: savedGuestName });
@@ -1297,6 +1837,7 @@
     stopTyping();
     const wasGuest = Boolean(state.me && state.me.isGuest);
     leaveCall(false);
+    endPmCall(false);
 
     if (state.socket) {
       state.socket.disconnect();
@@ -1309,6 +1850,9 @@
     state.users = [];
     state.messages = [];
     state.typingUsers = [];
+    state.pmUnread = {};
+    state.activePmUser = null;
+    closePmInbox();
     localStorage.removeItem(storageKeys.token);
 
     if (wasGuest) {
@@ -1343,25 +1887,24 @@
       return;
     }
 
-    elements.pmModalTitle.textContent = `Message ${state.selectedUser.username}`;
-    elements.pmMessage.value = "";
-    closeUserMenu();
-    openModal(elements.pmModalOverlay);
-    window.setTimeout(function () {
-      elements.pmMessage.focus();
-    }, 0);
+    openPmConversation({
+      username: state.selectedUser.username,
+      displayName: state.selectedUser.username,
+      socketId: state.selectedUser.socketId
+    });
   }
 
   function sendPrivateMessage() {
-    const message = elements.pmMessage.value.trim();
-    if (!state.socket || !state.selectedUser || !message) return;
+    const message = elements.pmWindowInput.value.trim();
+    const targetUser = state.activePmUser ? getConversationTarget(state.activePmUser.username) : null;
+    if (!state.socket || !state.activePmUser || !targetUser || !targetUser.socketId || !message) return;
 
     state.socket.emit("private message", {
-      toSocketId: state.selectedUser.socketId,
+      toSocketId: targetUser.socketId,
       message
     });
-
-    closeModal(elements.pmModalOverlay);
+    elements.pmWindowInput.value = "";
+    elements.pmWindowInput.focus();
   }
 
   async function handleDeleteRoom() {
@@ -1526,6 +2069,42 @@
     state.draggingCall = null;
   }
 
+  function handlePmWindowPointerDown(event) {
+    const handle = event.target.closest("[data-pm-drag-handle='true']");
+    if (!handle) {
+      return;
+    }
+
+    state.draggingPmWindow = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: state.pmWindowPosition.x,
+      originY: state.pmWindowPosition.y
+    };
+    event.preventDefault();
+  }
+
+  function handlePmWindowPointerMove(event) {
+    if (!state.draggingPmWindow || state.draggingPmWindow.pointerId !== event.pointerId) {
+      return;
+    }
+
+    state.pmWindowPosition = clampPmWindowPosition({
+      x: state.draggingPmWindow.originX + (event.clientX - state.draggingPmWindow.startX),
+      y: state.draggingPmWindow.originY + (event.clientY - state.draggingPmWindow.startY)
+    });
+    renderPmWindow();
+  }
+
+  function handlePmWindowPointerUp(event) {
+    if (!state.draggingPmWindow || state.draggingPmWindow.pointerId !== event.pointerId) {
+      return;
+    }
+
+    state.draggingPmWindow = null;
+  }
+
   function bindEvents() {
     elements.authTabs.addEventListener("click", function (event) {
       const button = event.target.closest("[data-tab]");
@@ -1540,6 +2119,7 @@
     elements.messageInput.addEventListener("input", handleTypingInput);
     elements.messages.addEventListener("click", handleMessageActions);
     elements.callParticipants.addEventListener("pointerdown", handleCallPointerDown);
+    elements.pmWindow.addEventListener("pointerdown", handlePmWindowPointerDown);
     elements.callParticipants.addEventListener("click", function (event) {
       if (event.target.closest("[data-toggle-mic='true']")) {
         toggleLocalMicrophone();
@@ -1579,6 +2159,10 @@
     elements.logoutBtn.addEventListener("click", function () {
       logout(true);
     });
+    elements.openInboxBtn.addEventListener("click", function (event) {
+      event.stopPropagation();
+      openPmInbox();
+    });
     elements.joinAudioBtn.addEventListener("click", function () {
       startCall();
     });
@@ -1601,6 +2185,17 @@
         event.stopPropagation();
         openPublishedMedia(openMediaButton.dataset.openMediaId);
       }
+    });
+    elements.pmFeed.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-open-pm-user]");
+      if (!button) {
+        return;
+      }
+
+      openPmConversation({
+        username: button.dataset.openPmUser,
+        displayName: button.dataset.openPmUser
+      });
     });
 
     const sidebarTabs = document.getElementById("sidebar-tabs");
@@ -1637,12 +2232,18 @@
         return;
       }
       closeUserMenu();
+
+      if (event.target.closest("#open-inbox-btn") || event.target.closest("#pm-inbox-popover")) {
+        return;
+      }
+      closePmInbox();
     });
 
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape") {
         closeUserMenu();
-        closeModal(elements.pmModalOverlay);
+        closePmInbox();
+        closePmWindow();
         closeModal(elements.roomModalOverlay);
         closeModal(elements.preferencesModalOverlay);
       }
@@ -1651,13 +2252,35 @@
     document.addEventListener("pointermove", handleCallPointerMove);
     document.addEventListener("pointerup", handleCallPointerUp);
     document.addEventListener("pointercancel", handleCallPointerUp);
+    document.addEventListener("pointermove", handlePmWindowPointerMove);
+    document.addEventListener("pointerup", handlePmWindowPointerUp);
+    document.addEventListener("pointercancel", handlePmWindowPointerUp);
 
     elements.menuPmBtn.addEventListener("click", openPmModal);
     elements.menuBlockBtn.addEventListener("click", toggleBlockedUser);
-    elements.pmCancelBtn.addEventListener("click", function () {
-      closeModal(elements.pmModalOverlay);
+    elements.pmWindowCloseBtn.addEventListener("click", closePmWindow);
+    elements.pmWindowForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      sendPrivateMessage();
     });
-    elements.pmSendBtn.addEventListener("click", sendPrivateMessage);
+    elements.pmAudioBtn.addEventListener("click", function () {
+      startPmCall("audio");
+    });
+    elements.pmVideoBtn.addEventListener("click", function () {
+      startPmCall("video");
+    });
+    elements.pmEndCallBtn.addEventListener("click", function () {
+      endPmCall();
+    });
+    elements.pmRequestBanner.addEventListener("click", function (event) {
+      if (event.target.closest("[data-accept-pm-call='true']")) {
+        acceptPmCall();
+      }
+
+      if (event.target.closest("[data-decline-pm-call='true']")) {
+        declinePmCall();
+      }
+    });
 
     elements.openRoomModalBtn.addEventListener("click", function () {
       openModal(elements.roomModalOverlay);
@@ -1670,7 +2293,7 @@
     });
     elements.roomForm.addEventListener("submit", handleCreateRoom);
 
-    elements.openPreferencesBtn.addEventListener("click", function () {
+    elements.openPreferencesInlineBtn.addEventListener("click", function () {
       applyPreferences();
       openModal(elements.preferencesModalOverlay);
     });
@@ -1692,7 +2315,6 @@
     });
 
     [
-      elements.pmModalOverlay,
       elements.roomModalOverlay,
       elements.preferencesModalOverlay
     ].forEach(function (overlay) {
