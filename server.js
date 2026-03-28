@@ -1,15 +1,12 @@
 const express = require("express");
 const http = require("http");
-const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
 const { Server } = require("socket.io");
+const { createPersistence } = require("./persistence");
 
 const app = express();
 const server = http.createServer(app);
 
-const DATA_DIR = path.join(__dirname, "data");
-const STORE_FILE = path.join(DATA_DIR, "store.json");
 const AUTH_SECRET = process.env.AUTH_SECRET || "chatdude-dev-secret-change-me";
 const MAX_ROOM_MESSAGES = 120;
 const MAX_PRIVATE_MESSAGES = 60;
@@ -56,49 +53,13 @@ const io = new Server(server, {
 });
 
 const onlineUsers = new Map();
-
-function ensureDataStore() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-
-  if (!fs.existsSync(STORE_FILE)) {
-    const initialStore = {
-      users: [],
-      rooms: DEFAULT_ROOMS,
-      roomMessages: [],
-      privateMessages: []
-    };
-
-    fs.writeFileSync(STORE_FILE, JSON.stringify(initialStore, null, 2));
-  }
-}
-
-function saveStore(store) {
-  fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2));
-}
-
-function loadStore() {
-  ensureDataStore();
-
-  const parsed = JSON.parse(fs.readFileSync(STORE_FILE, "utf8"));
-
-  if (!Array.isArray(parsed.users)) parsed.users = [];
-  if (!Array.isArray(parsed.rooms)) parsed.rooms = [];
-  if (!Array.isArray(parsed.roomMessages)) parsed.roomMessages = [];
-  if (!Array.isArray(parsed.privateMessages)) parsed.privateMessages = [];
-
-  DEFAULT_ROOMS.forEach((room) => {
-    if (!parsed.rooms.some((existing) => existing.slug === room.slug)) {
-      parsed.rooms.push(room);
-    }
-  });
-
-  saveStore(parsed);
-  return parsed;
-}
-
-let store = loadStore();
+let store = {
+  users: [],
+  rooms: [],
+  roomMessages: [],
+  privateMessages: []
+};
+let persistence;
 
 function createTimestampPayload(date = new Date()) {
   return {
@@ -366,7 +327,7 @@ function buildPrivateMessagePayload(message, viewerUsername) {
   };
 }
 
-function saveMessage(message) {
+async function saveMessage(message) {
   store.roomMessages.push(message);
   const roomMessages = store.roomMessages.filter((entry) => entry.roomSlug === message.roomSlug);
 
@@ -376,15 +337,15 @@ function saveMessage(message) {
     store.roomMessages = store.roomMessages.filter((entry) => !removableIds.has(entry.id));
   }
 
-  saveStore(store);
+  await persistence.saveRoomMessage(message);
 }
 
-function savePrivateMessage(message) {
+async function savePrivateMessage(message) {
   store.privateMessages.push(message);
   if (store.privateMessages.length > MAX_PRIVATE_MESSAGES) {
     store.privateMessages = store.privateMessages.slice(-MAX_PRIVATE_MESSAGES);
   }
-  saveStore(store);
+  await persistence.savePrivateMessage(message);
 }
 
 function sessionBlocksUsername(session, username) {
@@ -495,7 +456,7 @@ function canDeleteMessage(session, room, message) {
   return canManageRoom({ username: session.username }, room);
 }
 
-function createSystemMessage(roomSlug, text) {
+async function createSystemMessage(roomSlug, text) {
   const message = {
     id: crypto.randomUUID(),
     kind: "system",
@@ -508,7 +469,7 @@ function createSystemMessage(roomSlug, text) {
     ...createTimestampPayload()
   };
 
-  saveMessage(message);
+  await saveMessage(message);
   io.to(roomSlug).emit("system message", buildMessagePayload(message, null));
   emitRoomList();
 }
@@ -532,7 +493,7 @@ app.get("/api/bootstrap", (req, res) => {
   });
 });
 
-app.post("/api/auth/register", (req, res) => {
+app.post("/api/auth/register", async (req, res) => {
   const username = normalizeUsername(req.body.username || "");
   const displayName = normalizeUsername(req.body.displayName || username);
   const password = req.body.password || "";
@@ -563,7 +524,7 @@ app.post("/api/auth/register", (req, res) => {
   };
 
   store.users.push(user);
-  saveStore(store);
+  await persistence.createUser(user);
 
   res.status(201).json({
     token: issueAuthToken(user),
@@ -605,9 +566,9 @@ app.get("/api/me", requireAuth, (req, res) => {
   res.json({ user: toPublicUser(req.user) });
 });
 
-app.patch("/api/me/preferences", requireAuth, (req, res) => {
+app.patch("/api/me/preferences", requireAuth, async (req, res) => {
   req.user.preferences = sanitizePreferences(req.body.preferences || {});
-  saveStore(store);
+  await persistence.updateUser(req.user);
 
   for (const [socketId, session] of onlineUsers.entries()) {
     if (session.id === req.user.id) {
@@ -625,7 +586,7 @@ app.patch("/api/me/preferences", requireAuth, (req, res) => {
   });
 });
 
-app.patch("/api/me/blocks", requireAuth, (req, res) => {
+app.patch("/api/me/blocks", requireAuth, async (req, res) => {
   const username = normalizeUsername(req.body.username || "");
   const action = req.body.action === "remove" ? "remove" : "add";
 
@@ -653,7 +614,7 @@ app.patch("/api/me/blocks", requireAuth, (req, res) => {
   }
 
   req.user.blockedUsers = Array.from(blockedUsers);
-  saveStore(store);
+  await persistence.updateUser(req.user);
 
   for (const [socketId, session] of onlineUsers.entries()) {
     if (session.id === req.user.id) {
@@ -681,7 +642,7 @@ app.patch("/api/me/blocks", requireAuth, (req, res) => {
   });
 });
 
-app.post("/api/rooms", requireAuth, (req, res) => {
+app.post("/api/rooms", requireAuth, async (req, res) => {
   const name = normalizeUsername(req.body.name || "");
   const description = normalizeUsername(req.body.description || "");
   const slug = slugifyRoomName(name);
@@ -712,7 +673,7 @@ app.post("/api/rooms", requireAuth, (req, res) => {
   };
 
   store.rooms.push(room);
-  saveStore(store);
+  await persistence.createRoom(room);
   emitRoomList();
 
   res.status(201).json({
@@ -720,7 +681,7 @@ app.post("/api/rooms", requireAuth, (req, res) => {
   });
 });
 
-app.delete("/api/rooms/:slug", requireAuth, (req, res) => {
+app.delete("/api/rooms/:slug", requireAuth, async (req, res) => {
   const room = getRoomBySlug(req.params.slug);
 
   if (!room) {
@@ -736,7 +697,7 @@ app.delete("/api/rooms/:slug", requireAuth, (req, res) => {
   const fallbackRoom = getRoomBySlug("general") || store.rooms.find((entry) => entry.slug !== room.slug) || null;
   store.rooms = store.rooms.filter((entry) => entry.slug !== room.slug);
   removeRoomMessages(room.slug);
-  saveStore(store);
+  await persistence.deleteRoom(room.slug);
 
   if (fallbackRoom) {
     io.to(room.slug).emit("room removed", {
@@ -862,15 +823,15 @@ io.on("connection", (socket) => {
     updateUserList(room.slug);
     emitMediaState(room.slug);
 
-    if (previousRoom && previousRoom !== room.slug) {
+  if (previousRoom && previousRoom !== room.slug) {
       updateUserList(previousRoom);
-      createSystemMessage(previousRoom, `${currentSession.username} left the room`);
+      void createSystemMessage(previousRoom, `${currentSession.username} left the room`);
     }
 
-    createSystemMessage(room.slug, `${currentSession.username} joined the room`);
+    void createSystemMessage(room.slug, `${currentSession.username} joined the room`);
   });
 
-  socket.on("chat message", ({ message }) => {
+  socket.on("chat message", async ({ message }) => {
     const currentSession = onlineUsers.get(socket.id);
     const trimmed = String(message || "").trim();
 
@@ -893,7 +854,7 @@ io.on("connection", (socket) => {
       ...createTimestampPayload()
     };
 
-    saveMessage(entry);
+    await saveMessage(entry);
     io.to(room.slug).emit("chat message", buildMessagePayload(entry, socket.id));
     currentSession.isTyping = false;
     onlineUsers.set(socket.id, currentSession);
@@ -923,7 +884,7 @@ io.on("connection", (socket) => {
     io.to(currentSession.roomSlug).emit("typing update", usersNowTyping);
   });
 
-  socket.on("private message", ({ toSocketId, message }) => {
+  socket.on("private message", async ({ toSocketId, message }) => {
     const currentSession = onlineUsers.get(socket.id);
     const recipientSession = onlineUsers.get(toSocketId);
     const trimmed = String(message || "").trim();
@@ -956,7 +917,7 @@ io.on("connection", (socket) => {
       ...createTimestampPayload()
     };
 
-    savePrivateMessage(entry);
+    await savePrivateMessage(entry);
 
     io.to(toSocketId).emit("private message", buildPrivateMessagePayload(entry, recipientSession.username));
     socket.emit("private message", buildPrivateMessagePayload({
@@ -1191,7 +1152,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("delete message", ({ messageId }) => {
+  socket.on("delete message", async ({ messageId }) => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !messageId) return;
 
@@ -1205,7 +1166,7 @@ io.on("connection", (socket) => {
     }
 
     store.roomMessages = store.roomMessages.filter((entry) => entry.id !== messageId);
-    saveStore(store);
+    await persistence.deleteRoomMessage(messageId);
     io.to(message.roomSlug).emit("message deleted", {
       messageId,
       roomSlug: message.roomSlug
@@ -1218,7 +1179,7 @@ io.on("connection", (socket) => {
     onlineUsers.delete(socket.id);
 
     if (currentSession?.roomSlug) {
-      createSystemMessage(currentSession.roomSlug, `${currentSession.username} left the room`);
+      void createSystemMessage(currentSession.roomSlug, `${currentSession.username} left the room`);
       updateUserList(currentSession.roomSlug);
       emitMediaState(currentSession.roomSlug);
     }
@@ -1239,7 +1200,21 @@ setInterval(() => {
   });
 }, 60 * 1000);
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+async function start() {
+  persistence = await createPersistence(DEFAULT_ROOMS, {
+    maxRoomMessages: MAX_ROOM_MESSAGES,
+    maxPrivateMessages: MAX_PRIVATE_MESSAGES
+  });
+  store = persistence.store;
+
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Persistence mode: ${persistence.mode}`);
+  });
+}
+
+start().catch((error) => {
+  console.error("Failed to start ChatDude persistence layer.", error);
+  process.exit(1);
 });

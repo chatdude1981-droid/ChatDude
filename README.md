@@ -21,13 +21,24 @@ ChatDude is a lightweight realtime chat app built for a static frontend on GitHu
 - Frontend: static files hosted by GitHub Pages
 - Backend: [server.js](C:\Users\dontb\OneDrive\Desktop\chat-app\server.js) on Express + Socket.IO
 - Transport: cross-origin HTTP + Socket.IO with CORS support
-- Persistence: file-backed JSON store created at `data/store.json`
+- Persistence: hosted Postgres when `DATABASE_URL` is set, otherwise a local JSON fallback at `data/store.json`
 
-## Important persistence note
+## Persistence
 
-The current persistence layer is intentionally lightweight and free-tier friendly, but it writes to the local filesystem. That works well for local development and for deployments with persistent disk.
+ChatDude now supports two persistence modes:
 
-If your Render service is on an ephemeral filesystem, user accounts, room history, and saved preferences can be lost on restart or redeploy. For stronger production persistence, move the same data model to a managed database.
+- `Postgres` when `DATABASE_URL` is configured
+- `file` fallback when `DATABASE_URL` is missing
+
+For Render production use, you should set `DATABASE_URL` so accounts, rooms, room history, and private-message history survive redeploys.
+
+The backend will automatically:
+
+- create the required Postgres tables on boot
+- seed the default rooms
+- import existing `data/store.json` data once if the database is still empty
+
+That means you can migrate from the old file-backed store without manually rebuilding users and rooms.
 
 ## Local development
 
@@ -50,15 +61,27 @@ Recommended environment variables:
 ```env
 CLIENT_ORIGIN=https://your-github-pages-site.github.io
 AUTH_SECRET=replace-this-with-a-long-random-secret
+DATABASE_URL=postgresql://...
 ```
 
 Notes:
 
 - `CLIENT_ORIGIN` can be a comma-separated list of allowed frontend origins.
 - `AUTH_SECRET` should be set in Render so account tokens are not signed with the development fallback secret.
-- If you want persistence on Render, attach a persistent disk or move to a hosted database.
+- `DATABASE_URL` should point to a hosted Postgres database. This is the recommended production setup for stopping account loss on redeploy.
+- If you are connecting to a local Postgres instance without SSL, you can set `PGSSL_DISABLE=true`.
 - Published cameras use browser WebRTC over HTTPS with Socket.IO signaling through the existing Render backend.
 - This implementation is optimized for small-room viewing on free-tier hosting by using direct peer-to-peer connections instead of a separate media server.
+
+### Hosted database options
+
+This backend is written against standard Postgres, so practical free-tier-friendly options include:
+
+- Neon
+- Supabase Postgres
+- Render Postgres
+
+If you already use Render for the web service, Render Postgres is the most direct setup. If you want the smallest possible always-on free-tier footprint, Neon is a good fit too.
 
 ### GitHub Pages frontend
 
@@ -87,8 +110,7 @@ If you ever need to point the frontend at a different backend, override the conf
 
 ## Next sensible upgrades
 
-1. Move persistence to Postgres or another managed database
-2. Add moderation actions like mute, kick, and room ownership controls
-3. Persist private-message threads per user
-4. Add reconnect-aware session restoration for guests
-5. Add password reset and email-backed auth later if needed
+1. Add moderation actions like mute, kick, and room ownership controls
+2. Persist richer private-message threads and inbox state server-side
+3. Add reconnect-aware session restoration for guests
+4. Add password reset and email-backed auth later if needed
