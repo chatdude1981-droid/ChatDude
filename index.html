@@ -4,709 +4,287 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ChatDude</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    :root {
-      --bg: #0f172a;
-      --panel: #111827;
-      --panel-2: #1f2937;
-      --panel-3: #0b1220;
-      --border: #243041;
-      --text: #e5e7eb;
-      --muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-hover: #0ea5e9;
-      --system: #fbbf24;
-      --private: #c084fc;
-      --danger: #ef4444;
-      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-    }
-
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 30%),
-        radial-gradient(circle at top right, rgba(192, 132, 252, 0.08), transparent 25%),
-        linear-gradient(180deg, #0b1120 0%, #0f172a 100%);
-      color: var(--text);
-      min-height: 100vh;
-    }
-
-    .app-shell {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 28px 20px;
-    }
-
-    .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-
-    .brand h1 {
-      margin: 0;
-      font-size: 2rem;
-      letter-spacing: 0.5px;
-    }
-
-    .brand p {
-      margin: 6px 0 0;
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
-
-    .room-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(56, 189, 248, 0.12);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      color: #bae6fd;
-      padding: 10px 14px;
-      border-radius: 999px;
-      font-size: 0.95rem;
-      min-height: 42px;
-    }
-
-    .card {
-      background: rgba(17, 24, 39, 0.92);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      box-shadow: var(--shadow);
-    }
-
-    #join-section {
-      max-width: 700px;
-      margin: 40px auto 0;
-      padding: 24px;
-    }
-
-    #join-section h2 {
-      margin-top: 0;
-      margin-bottom: 10px;
-    }
-
-    #join-section p {
-      margin-top: 0;
-      color: var(--muted);
-      margin-bottom: 18px;
-    }
-
-    #join-form {
-      display: grid;
-      grid-template-columns: 1fr 180px 160px;
-      gap: 12px;
-    }
-
-    #chat-container {
-      display: none;
-    }
-
-    #main-layout {
-      display: grid;
-      grid-template-columns: 1fr 280px;
-      gap: 18px;
-      align-items: start;
-    }
-
-    #chat-panel {
-      padding: 16px;
-    }
-
-    #messages {
-      list-style: none;
-      padding: 0;
-      margin: 0 0 14px 0;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: rgba(11, 18, 32, 0.9);
-      height: 500px;
-      overflow-y: auto;
-    }
-
-    #messages li {
-      padding: 12px 14px;
-      border-bottom: 1px solid rgba(36, 48, 65, 0.7);
-      line-height: 1.45;
-      word-break: break-word;
-    }
-
-    #messages li:last-child {
-      border-bottom: none;
-    }
-
-    .message-row {
-      display: flex;
-      gap: 8px;
-      align-items: baseline;
-      flex-wrap: wrap;
-    }
-
-    .time {
-      color: var(--muted);
-      font-size: 0.8rem;
-      flex-shrink: 0;
-    }
-
-    .username {
-      font-weight: bold;
-      color: var(--accent);
-      cursor: pointer;
-      transition: color 0.15s ease;
-    }
-
-    .username:hover {
-      color: var(--accent-hover);
-      text-decoration: underline;
-    }
-
-    .system {
-      color: var(--system);
-      font-style: italic;
-    }
-
-    .private {
-      color: #e9d5ff;
-      background: rgba(192, 132, 252, 0.08);
-    }
-
-    .private .username {
-      color: var(--private);
-    }
-
-    .system .time {
-      color: #fcd34d;
-    }
-
-    .message-text {
-      color: var(--text);
-    }
-
-    #message-form {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
-    }
-
-    #sidebar {
-      padding: 16px;
-    }
-
-    .sidebar-title {
-      margin: 0 0 12px 0;
-      font-size: 1.1rem;
-    }
-
-    .sidebar-subtitle {
-      margin: 0 0 14px 0;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    #users {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      overflow: hidden;
-      background: rgba(11, 18, 32, 0.9);
-    }
-
-    #users li {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      border-bottom: 1px solid rgba(36, 48, 65, 0.7);
-    }
-
-    #users li:last-child {
-      border-bottom: none;
-    }
-
-    .user-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #22c55e;
-      flex-shrink: 0;
-      box-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
-    }
-
-    .user-name {
-      color: var(--text);
-      cursor: pointer;
-      transition: color 0.15s ease;
-    }
-
-    .user-name:hover {
-      color: var(--accent);
-      text-decoration: underline;
-    }
-
-    input,
-    select,
-    button,
-    textarea {
-      font: inherit;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      outline: none;
-    }
-
-    input,
-    select,
-    textarea {
-      width: 100%;
-      background: rgba(11, 18, 32, 0.95);
-      color: var(--text);
-      padding: 12px 14px;
-    }
-
-    input::placeholder,
-    textarea::placeholder {
-      color: var(--muted);
-    }
-
-    input:focus,
-    select:focus,
-    textarea:focus {
-      border-color: rgba(56, 189, 248, 0.6);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
-    }
-
-    button {
-      background: var(--accent);
-      color: #062033;
-      font-weight: bold;
-      padding: 12px 18px;
-      cursor: pointer;
-      transition: background 0.15s ease, transform 0.1s ease;
-    }
-
-    button:hover {
-      background: var(--accent-hover);
-    }
-
-    button:active {
-      transform: translateY(1px);
-    }
-
-    .muted-empty {
-      color: var(--muted);
-      padding: 14px;
-      font-style: italic;
-    }
-
-    /* User popup menu */
-    #user-menu {
-      position: fixed;
-      display: none;
-      min-width: 180px;
-      background: #0b1220;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      box-shadow: var(--shadow);
-      overflow: hidden;
-      z-index: 1000;
-    }
-
-    #user-menu-header {
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 0.9rem;
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .user-menu-btn {
-      width: 100%;
-      border: none;
-      border-radius: 0;
-      background: transparent;
-      color: var(--text);
-      text-align: left;
-      padding: 12px 14px;
-      cursor: pointer;
-    }
-
-    .user-menu-btn:hover {
-      background: rgba(56, 189, 248, 0.1);
-      color: #bae6fd;
-    }
-
-    /* PM modal */
-    #pm-modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.55);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1100;
-      padding: 20px;
-    }
-
-    #pm-modal {
-      width: 100%;
-      max-width: 520px;
-      padding: 20px;
-      background: #111827;
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      box-shadow: var(--shadow);
-    }
-
-    #pm-modal h3 {
-      margin-top: 0;
-      margin-bottom: 8px;
-    }
-
-    #pm-modal p {
-      margin-top: 0;
-      margin-bottom: 14px;
-      color: var(--muted);
-    }
-
-    #pm-message {
-      min-height: 120px;
-      resize: vertical;
-      margin-bottom: 14px;
-    }
-
-    .pm-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-    }
-
-    .btn-secondary {
-      background: transparent;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.04);
-    }
-
-    @media (max-width: 900px) {
-      #main-layout {
-        grid-template-columns: 1fr;
-      }
-
-      #join-form {
-        grid-template-columns: 1fr;
-      }
-
-      .topbar {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      #messages {
-        height: 420px;
-      }
-    }
-  </style>
+  <meta
+    name="description"
+    content="ChatDude is a modern realtime chat room app with guest access, accounts, saved themes, and lightweight rooms."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="./styles.css" />
 </head>
-<body>
-  <div class="app-shell">
-    <div class="topbar">
-      <div class="brand">
-        <h1>ChatDude</h1>
-        <p>Realtime chat rooms with private messaging</p>
+<body data-background-style="aurora">
+  <div class="page-shell">
+    <section id="auth-shell" class="auth-shell">
+      <div class="hero-panel card">
+        <div class="hero-copy">
+          <span class="eyebrow">ChatDude</span>
+          <h1>Realtime rooms with guest speed and account-powered upgrades.</h1>
+          <p>
+            Jump in as a guest in seconds, or create an account to unlock saved themes,
+            private messaging, custom rooms, and a friendlier returning-user experience.
+          </p>
+        </div>
+
+        <div class="hero-grid">
+          <article class="hero-stat">
+            <strong>Guest Mode</strong>
+            <span>Join public rooms fast with no signup.</span>
+          </article>
+          <article class="hero-stat">
+            <strong>Accounts</strong>
+            <span>Passwords, saved preferences, and better chat tools.</span>
+          </article>
+          <article class="hero-stat">
+            <strong>Live Rooms</strong>
+            <span>Typing status, room history, user actions, and sleek UI.</span>
+          </article>
+        </div>
       </div>
-      <div class="room-badge" id="room-label">Not connected</div>
-    </div>
 
-    <div id="join-section" class="card">
-      <h2>Join a room</h2>
-      <p>Pick a username and choose a room to enter.</p>
-      <form id="join-form">
-        <input id="username" placeholder="Enter your username" maxlength="20" />
-        <select id="room">
-          <option value="general">General</option>
-          <option value="random">Random</option>
-          <option value="gaming">Gaming</option>
-        </select>
-        <button type="submit">Join Chat</button>
-      </form>
-    </div>
+      <div class="auth-card card">
+        <div class="tab-strip" id="auth-tabs">
+          <button class="tab-button is-active" data-tab="guest" type="button">Guest</button>
+          <button class="tab-button" data-tab="login" type="button">Login</button>
+          <button class="tab-button" data-tab="register" type="button">Create Account</button>
+        </div>
 
-    <div id="chat-container">
-      <div id="main-layout">
-        <div id="chat-panel" class="card">
-          <ul id="messages"></ul>
+        <div class="tab-panel is-active" data-panel="guest">
+          <h2>Join in seconds</h2>
+          <p class="subtle-copy">Guests can chat in public rooms right away, with a lighter feature set.</p>
+          <form id="guest-form" class="stack-form">
+            <label class="field">
+              <span>Guest name</span>
+              <input id="guest-name" maxlength="20" placeholder="Pick a display name" />
+            </label>
+            <label class="field">
+              <span>Start room</span>
+              <select id="guest-room-select"></select>
+            </label>
+            <button type="submit">Enter as Guest</button>
+          </form>
+          <div class="feature-note">
+            <strong>Guest limits:</strong>
+            <span>No saved theme, no custom rooms, no private messages.</span>
+          </div>
+        </div>
 
-          <form id="message-form">
-            <input id="input" autocomplete="off" placeholder="Type a room message..." />
-            <button type="submit">Send</button>
+        <div class="tab-panel" data-panel="login">
+          <h2>Welcome back</h2>
+          <p class="subtle-copy">Sign in to keep your style, create rooms, and message people directly.</p>
+          <form id="login-form" class="stack-form">
+            <label class="field">
+              <span>Username</span>
+              <input id="login-username" maxlength="20" placeholder="Your username" />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="login-password" type="password" maxlength="72" placeholder="Your password" />
+            </label>
+            <button type="submit">Login</button>
           </form>
         </div>
 
-        <aside id="sidebar" class="card">
-          <h3 class="sidebar-title">Online Users</h3>
-          <p class="sidebar-subtitle">Click a username to open actions.</p>
-          <ul id="users"></ul>
+        <div class="tab-panel" data-panel="register">
+          <h2>Create your space</h2>
+          <p class="subtle-copy">Registered users get saved appearance settings, DMs, and custom rooms.</p>
+          <form id="register-form" class="stack-form">
+            <label class="field">
+              <span>Display name</span>
+              <input id="register-display-name" maxlength="24" placeholder="How people see you" />
+            </label>
+            <label class="field">
+              <span>Username</span>
+              <input id="register-username" maxlength="20" placeholder="letters, numbers, underscores" />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="register-password" type="password" maxlength="72" placeholder="8+ characters" />
+            </label>
+            <button type="submit">Create Account</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section id="chat-shell" class="chat-shell hidden">
+      <header class="topbar card">
+        <div class="brand-cluster">
+          <div>
+            <span class="eyebrow">ChatDude</span>
+            <h2 id="session-title">Connected</h2>
+          </div>
+          <div class="room-pill" id="active-room-pill">Waiting for room...</div>
+        </div>
+
+        <div class="account-cluster">
+          <div id="account-badge" class="account-badge"></div>
+          <button id="open-room-modal-btn" class="ghost-button hidden" type="button">New Room</button>
+          <button id="delete-room-btn" class="ghost-button hidden" type="button">Delete Room</button>
+          <button id="open-preferences-btn" class="ghost-button hidden" type="button">Appearance</button>
+          <button id="logout-btn" class="ghost-button" type="button">Leave</button>
+        </div>
+      </header>
+
+      <div class="app-grid">
+        <aside class="room-rail card">
+          <div class="panel-heading">
+            <div>
+              <h3>Rooms</h3>
+              <p>Hop between public spaces and keep the flow moving.</p>
+            </div>
+          </div>
+          <div id="room-list" class="room-list"></div>
+          <div id="guest-upgrade-card" class="upgrade-card hidden">
+            <strong>Unlock the full toolkit</strong>
+            <span>Create an account for saved themes, DMs, and custom rooms.</span>
+          </div>
+        </aside>
+
+        <main class="chat-panel card">
+          <div class="chat-panel-header">
+            <div>
+              <h3 id="room-title">Room</h3>
+              <p id="room-description">Pick a room to start chatting.</p>
+            </div>
+            <div id="typing-indicator" class="typing-indicator"></div>
+          </div>
+
+          <ul id="messages" class="messages"></ul>
+
+          <form id="message-form" class="composer">
+            <input
+              id="message-input"
+              autocomplete="off"
+              maxlength="600"
+              placeholder="Type a message for the room..."
+            />
+            <button id="send-message-btn" type="submit">Send</button>
+          </form>
+        </main>
+
+        <aside class="side-panel">
+          <section class="card people-panel">
+            <div class="panel-heading">
+              <div>
+                <h3>Online now</h3>
+                <p>Tap a person to open actions.</p>
+              </div>
+            </div>
+            <ul id="users-list" class="users-list"></ul>
+          </section>
+
+          <section class="card inbox-panel">
+            <div class="panel-heading">
+              <div>
+                <h3>Private inbox</h3>
+                <p>Recent private messages from this session.</p>
+              </div>
+            </div>
+            <ul id="pm-feed" class="pm-feed"></ul>
+          </section>
         </aside>
       </div>
-    </div>
+    </section>
   </div>
 
-  <div id="user-menu">
-    <div id="user-menu-header">User</div>
-    <button class="user-menu-btn" id="menu-pm-btn" type="button">Private Message</button>
+  <div id="user-menu" class="menu hidden">
+    <div id="user-menu-header" class="menu-header">User</div>
+    <button id="menu-pm-btn" class="menu-action" type="button">Private message</button>
   </div>
 
-  <div id="pm-modal-overlay">
-    <div id="pm-modal">
-      <h3>Private Message</h3>
-      <p id="pm-modal-target-label">Send a message</p>
-      <textarea id="pm-message" placeholder="Type your private message..."></textarea>
-      <div class="pm-actions">
-        <button type="button" class="btn-secondary" id="pm-cancel-btn">Cancel</button>
-        <button type="button" id="pm-send-btn">Send Private Message</button>
+  <div id="pm-modal-overlay" class="modal-overlay hidden">
+    <div class="modal card">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">Private Message</span>
+          <h3 id="pm-modal-title">Start a direct message</h3>
+        </div>
+        <button id="pm-cancel-btn" class="icon-button" type="button">Close</button>
+      </div>
+      <textarea id="pm-message" maxlength="600" placeholder="Write something thoughtful..."></textarea>
+      <div class="modal-actions">
+        <button id="pm-send-btn" type="button">Send message</button>
       </div>
     </div>
   </div>
 
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <div id="room-modal-overlay" class="modal-overlay hidden">
+    <div class="modal card">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">New Room</span>
+          <h3>Create a room</h3>
+        </div>
+        <button id="room-cancel-btn" class="icon-button" type="button">Close</button>
+      </div>
+      <form id="room-form" class="stack-form">
+        <label class="field">
+          <span>Room name</span>
+          <input id="room-name-input" maxlength="32" placeholder="Late Night Crew" />
+        </label>
+        <label class="field">
+          <span>Description</span>
+          <input id="room-description-input" maxlength="80" placeholder="Why this room exists" />
+        </label>
+        <button type="submit">Create room</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="preferences-modal-overlay" class="modal-overlay hidden">
+    <div class="modal card">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">Appearance</span>
+          <h3>Make ChatDude yours</h3>
+        </div>
+        <button id="preferences-cancel-btn" class="icon-button" type="button">Close</button>
+      </div>
+      <form id="preferences-form" class="stack-form">
+        <label class="field">
+          <span>Font</span>
+          <select id="font-select">
+            <option value="Space Grotesk">Space Grotesk</option>
+            <option value="DM Sans">DM Sans</option>
+            <option value="Manrope">Manrope</option>
+            <option value="IBM Plex Sans">IBM Plex Sans</option>
+          </select>
+        </label>
+        <div class="color-row">
+          <label class="field">
+            <span>Accent color</span>
+            <input id="accent-color-input" type="color" value="#38bdf8" />
+          </label>
+          <label class="field">
+            <span>Bubble color</span>
+            <input id="bubble-color-input" type="color" value="#1d4ed8" />
+          </label>
+        </div>
+        <label class="field">
+          <span>Background</span>
+          <select id="background-style-select">
+            <option value="aurora">Aurora</option>
+            <option value="midnight">Midnight</option>
+            <option value="sunrise">Sunrise</option>
+          </select>
+        </label>
+        <button type="submit">Save appearance</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack"></div>
+
   <script>
-    const socket = io("https://chatdude-1091.onrender.com");
-
-    const joinForm = document.getElementById("join-form");
-    const usernameInput = document.getElementById("username");
-    const roomSelect = document.getElementById("room");
-    const joinSection = document.getElementById("join-section");
-    const chatContainer = document.getElementById("chat-container");
-    const roomLabel = document.getElementById("room-label");
-
-    const messageForm = document.getElementById("message-form");
-    const input = document.getElementById("input");
-    const messages = document.getElementById("messages");
-
-    const usersList = document.getElementById("users");
-
-    const userMenu = document.getElementById("user-menu");
-    const userMenuHeader = document.getElementById("user-menu-header");
-    const menuPmBtn = document.getElementById("menu-pm-btn");
-
-    const pmModalOverlay = document.getElementById("pm-modal-overlay");
-    const pmModalTargetLabel = document.getElementById("pm-modal-target-label");
-    const pmMessage = document.getElementById("pm-message");
-    const pmCancelBtn = document.getElementById("pm-cancel-btn");
-    const pmSendBtn = document.getElementById("pm-send-btn");
-
-    let currentSocketId = "";
-    let selectedUser = null;
-
-    socket.on("connect", function () {
-      currentSocketId = socket.id;
-    });
-
-    joinForm.addEventListener("submit", function (e) {
-      e.preventDefault();
-
-      const username = usernameInput.value.trim();
-      const room = roomSelect.value;
-
-      if (!username) return;
-
-      socket.emit("join room", { username, room });
-    });
-
-    socket.on("joined room", function (data) {
-      currentSocketId = data.socketId;
-      joinSection.style.display = "none";
-      chatContainer.style.display = "block";
-      roomLabel.textContent = `Room: ${capitalize(data.room)} • ${data.username}`;
-    });
-
-    messageForm.addEventListener("submit", function (e) {
-      e.preventDefault();
-
-      const message = input.value.trim();
-      if (!message) return;
-
-      socket.emit("chat message", message);
-      input.value = "";
-      input.focus();
-    });
-
-    function capitalize(value) {
-      return value.charAt(0).toUpperCase() + value.slice(1);
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    function appendMessage(html, className = "") {
-      const item = document.createElement("li");
-      if (className) item.classList.add(className);
-      item.innerHTML = html;
-      messages.appendChild(item);
-      messages.scrollTop = messages.scrollHeight;
-    }
-
-    function appendChatMessage(data) {
-      appendMessage(`
-        <div class="message-row">
-          <span class="time">[${escapeHtml(data.time)}]</span>
-          <span class="username" data-socket-id="${escapeHtml(data.socketId)}" data-username="${escapeHtml(data.username)}">${escapeHtml(data.username)}</span>
-          <span class="message-text">${escapeHtml(data.message)}</span>
-        </div>
-      `);
-    }
-
-    function appendSystemMessage(data) {
-      appendMessage(`
-        <div class="message-row system">
-          <span class="time">[${escapeHtml(data.time)}]</span>
-          <span>${escapeHtml(data.message)}</span>
-        </div>
-      `, "system");
-    }
-
-    function appendPrivateMessage(data) {
-      appendMessage(`
-        <div class="message-row">
-          <span class="time">[${escapeHtml(data.time)}]</span>
-          <span class="username" data-socket-id="${escapeHtml(data.fromSocketId)}" data-username="${escapeHtml(data.from.replace(/^\(to /, "").replace(/\)$/, ""))}">${escapeHtml(data.from)}</span>
-          <span class="message-text">${escapeHtml(data.message)}</span>
-        </div>
-      `, "private");
-    }
-
-    socket.on("chat message", function (data) {
-      appendChatMessage(data);
-    });
-
-    socket.on("system message", function (data) {
-      appendSystemMessage(data);
-    });
-
-    socket.on("private message", function (data) {
-      appendPrivateMessage(data);
-    });
-
-    socket.on("user list", function (users) {
-      usersList.innerHTML = "";
-
-      const otherUsers = users.filter(user => user.socketId !== currentSocketId);
-
-      if (otherUsers.length === 0) {
-        usersList.innerHTML = `<li class="muted-empty">No other users in this room yet.</li>`;
-        return;
-      }
-
-      otherUsers.forEach(function (user) {
-        const li = document.createElement("li");
-        li.innerHTML = `
-          <span class="user-dot"></span>
-          <span class="user-name" data-socket-id="${escapeHtml(user.socketId)}" data-username="${escapeHtml(user.username)}">${escapeHtml(user.username)}</span>
-        `;
-        usersList.appendChild(li);
-      });
-    });
-
-    function openUserMenu(socketId, username, x, y) {
-      if (!socketId || socketId === currentSocketId) return;
-
-      selectedUser = { socketId, username };
-      userMenuHeader.textContent = username;
-
-      userMenu.style.display = "block";
-
-      const menuRect = userMenu.getBoundingClientRect();
-      const maxX = window.innerWidth - menuRect.width - 10;
-      const maxY = window.innerHeight - menuRect.height - 10;
-
-      userMenu.style.left = `${Math.min(x, maxX)}px`;
-      userMenu.style.top = `${Math.min(y, maxY)}px`;
-    }
-
-    function closeUserMenu() {
-      userMenu.style.display = "none";
-    }
-
-    function openPmModal() {
-      if (!selectedUser) return;
-      pmModalTargetLabel.textContent = `Send a private message to ${selectedUser.username}`;
-      pmMessage.value = "";
-      pmModalOverlay.style.display = "flex";
-      closeUserMenu();
-      setTimeout(() => pmMessage.focus(), 0);
-    }
-
-    function closePmModal() {
-      pmModalOverlay.style.display = "none";
-    }
-
-    menuPmBtn.addEventListener("click", function () {
-      openPmModal();
-    });
-
-    pmCancelBtn.addEventListener("click", function () {
-      closePmModal();
-    });
-
-    pmSendBtn.addEventListener("click", function () {
-      const message = pmMessage.value.trim();
-      if (!selectedUser || !message) return;
-
-      socket.emit("private message", {
-        toSocketId: selectedUser.socketId,
-        message
-      });
-
-      closePmModal();
-    });
-
-    pmMessage.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") {
-        closePmModal();
-      }
-    });
-
-    pmModalOverlay.addEventListener("click", function (e) {
-      if (e.target === pmModalOverlay) {
-        closePmModal();
-      }
-    });
-
-    document.addEventListener("click", function (e) {
-      const clickableUser = e.target.closest("[data-socket-id][data-username]");
-
-      if (clickableUser) {
-        const socketId = clickableUser.dataset.socketId;
-        const username = clickableUser.dataset.username;
-        openUserMenu(socketId, username, e.clientX, e.clientY);
-        return;
-      }
-
-      if (!e.target.closest("#user-menu")) {
-        closeUserMenu();
-      }
-    });
-
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") {
-        closeUserMenu();
-        closePmModal();
-      }
-    });
+    window.CHATDUDE_CONFIG = window.CHATDUDE_CONFIG || {
+      serverUrl: "https://chatdude-1091.onrender.com"
+    };
   </script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

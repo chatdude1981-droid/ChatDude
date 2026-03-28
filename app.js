@@ -1,0 +1,953 @@
+(function () {
+  const config = window.CHATDUDE_CONFIG || {};
+  const backendUrl = (config.serverUrl || "https://chatdude-1091.onrender.com").replace(/\/$/, "");
+  const storageKeys = {
+    token: "chatdude:token",
+    lastRoom: "chatdude:last-room",
+    guestName: "chatdude:guest-name",
+    pmFeed: "chatdude:pm-feed"
+  };
+
+  const state = {
+    token: localStorage.getItem(storageKeys.token) || "",
+    me: null,
+    rooms: [],
+    activeRoom: localStorage.getItem(storageKeys.lastRoom) || "general",
+    socket: null,
+    currentSocketId: "",
+    users: [],
+    messages: [],
+    typingUsers: [],
+    pmFeed: parseStoredJson(storageKeys.pmFeed, []),
+    selectedUser: null,
+    activeTab: "guest",
+    typingTimer: null,
+    isTyping: false
+  };
+
+  const elements = {
+    authShell: document.getElementById("auth-shell"),
+    chatShell: document.getElementById("chat-shell"),
+    authTabs: document.getElementById("auth-tabs"),
+    guestForm: document.getElementById("guest-form"),
+    loginForm: document.getElementById("login-form"),
+    registerForm: document.getElementById("register-form"),
+    guestName: document.getElementById("guest-name"),
+    guestRoomSelect: document.getElementById("guest-room-select"),
+    loginUsername: document.getElementById("login-username"),
+    loginPassword: document.getElementById("login-password"),
+    registerDisplayName: document.getElementById("register-display-name"),
+    registerUsername: document.getElementById("register-username"),
+    registerPassword: document.getElementById("register-password"),
+    sessionTitle: document.getElementById("session-title"),
+    activeRoomPill: document.getElementById("active-room-pill"),
+    accountBadge: document.getElementById("account-badge"),
+    openRoomModalBtn: document.getElementById("open-room-modal-btn"),
+    deleteRoomBtn: document.getElementById("delete-room-btn"),
+    openPreferencesBtn: document.getElementById("open-preferences-btn"),
+    logoutBtn: document.getElementById("logout-btn"),
+    guestUpgradeCard: document.getElementById("guest-upgrade-card"),
+    roomList: document.getElementById("room-list"),
+    roomTitle: document.getElementById("room-title"),
+    roomDescription: document.getElementById("room-description"),
+    messages: document.getElementById("messages"),
+    messageForm: document.getElementById("message-form"),
+    messageInput: document.getElementById("message-input"),
+    typingIndicator: document.getElementById("typing-indicator"),
+    usersList: document.getElementById("users-list"),
+    pmFeed: document.getElementById("pm-feed"),
+    userMenu: document.getElementById("user-menu"),
+    userMenuHeader: document.getElementById("user-menu-header"),
+    menuPmBtn: document.getElementById("menu-pm-btn"),
+    pmModalOverlay: document.getElementById("pm-modal-overlay"),
+    pmModalTitle: document.getElementById("pm-modal-title"),
+    pmMessage: document.getElementById("pm-message"),
+    pmCancelBtn: document.getElementById("pm-cancel-btn"),
+    pmSendBtn: document.getElementById("pm-send-btn"),
+    roomModalOverlay: document.getElementById("room-modal-overlay"),
+    roomForm: document.getElementById("room-form"),
+    roomCancelBtn: document.getElementById("room-cancel-btn"),
+    roomNameInput: document.getElementById("room-name-input"),
+    roomDescriptionInput: document.getElementById("room-description-input"),
+    preferencesModalOverlay: document.getElementById("preferences-modal-overlay"),
+    preferencesForm: document.getElementById("preferences-form"),
+    preferencesCancelBtn: document.getElementById("preferences-cancel-btn"),
+    fontSelect: document.getElementById("font-select"),
+    accentColorInput: document.getElementById("accent-color-input"),
+    bubbleColorInput: document.getElementById("bubble-color-input"),
+    backgroundStyleSelect: document.getElementById("background-style-select"),
+    toastStack: document.getElementById("toast-stack")
+  };
+
+  function parseStoredJson(key, fallback) {
+    try {
+      const value = localStorage.getItem(key);
+      return value ? JSON.parse(value) : fallback;
+    } catch (_error) {
+      return fallback;
+    }
+  }
+
+  function savePmFeed() {
+    localStorage.setItem(storageKeys.pmFeed, JSON.stringify(state.pmFeed.slice(-20)));
+  }
+
+  function escapeHtml(value) {
+    const div = document.createElement("div");
+    div.textContent = String(value ?? "");
+    return div.innerHTML;
+  }
+
+  function formatTime(payload) {
+    if (typeof payload?.time === "string" && payload.time.trim()) {
+      return payload.time.trim();
+    }
+
+    if (typeof payload?.timestamp === "string" && payload.timestamp.trim()) {
+      const parsed = new Date(payload.timestamp);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit"
+        });
+      }
+    }
+
+    return new Date().toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  }
+
+  function showToast(message, tone) {
+    const toast = document.createElement("div");
+    toast.className = `toast ${tone || "info"}`;
+    toast.textContent = message;
+    elements.toastStack.appendChild(toast);
+
+    window.setTimeout(function () {
+      toast.remove();
+    }, 3400);
+  }
+
+  async function api(path, options) {
+    const headers = Object.assign(
+      { "Content-Type": "application/json" },
+      options?.headers || {}
+    );
+
+    if (state.token) {
+      headers.Authorization = `Bearer ${state.token}`;
+    }
+
+    const response = await fetch(`${backendUrl}${path}`, {
+      method: options?.method || "GET",
+      headers,
+      body: options?.body ? JSON.stringify(options.body) : undefined
+    });
+
+    const payload = await response.json().catch(function () {
+      return {};
+    });
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Something went wrong.");
+    }
+
+    return payload;
+  }
+
+  function setActiveTab(tab) {
+    state.activeTab = tab;
+
+    document.querySelectorAll("[data-tab]").forEach(function (button) {
+      button.classList.toggle("is-active", button.dataset.tab === tab);
+    });
+
+    document.querySelectorAll("[data-panel]").forEach(function (panel) {
+      panel.classList.toggle("is-active", panel.dataset.panel === tab);
+    });
+  }
+
+  function roomBySlug(roomSlug) {
+    return state.rooms.find(function (room) {
+      return room.slug === roomSlug;
+    }) || null;
+  }
+
+  function applyPreferences() {
+    const preferences = (state.me && state.me.preferences) || {
+      accentColor: "#38bdf8",
+      bubbleColor: "#1d4ed8",
+      fontFamily: "Space Grotesk",
+      backgroundStyle: "aurora"
+    };
+
+    document.documentElement.style.setProperty("--accent", preferences.accentColor);
+    document.documentElement.style.setProperty("--accent-strong", preferences.accentColor);
+    document.documentElement.style.setProperty("--bubble", preferences.bubbleColor);
+    document.documentElement.style.setProperty("--font-family", `"${preferences.fontFamily}", sans-serif`);
+    document.body.dataset.backgroundStyle = preferences.backgroundStyle;
+
+    elements.fontSelect.value = preferences.fontFamily;
+    elements.accentColorInput.value = preferences.accentColor;
+    elements.bubbleColorInput.value = preferences.bubbleColor;
+    elements.backgroundStyleSelect.value = preferences.backgroundStyle;
+  }
+
+  function renderAccount() {
+    if (!state.me) return;
+
+    const roleLabel = state.me.isGuest ? "Guest account" : "Registered account";
+    elements.sessionTitle.textContent = `${state.me.displayName || state.me.username} is live`;
+    elements.accountBadge.innerHTML = `
+      <strong>${escapeHtml(state.me.displayName || state.me.username)}</strong>
+      <span>${escapeHtml(roleLabel)}</span>
+    `;
+
+    elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
+    elements.openPreferencesBtn.classList.toggle("hidden", !state.me.canCustomize);
+    elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
+  }
+
+  function canManageActiveRoom() {
+    const room = roomBySlug(state.activeRoom);
+    return Boolean(
+      state.me &&
+      !state.me.isGuest &&
+      room &&
+      !room.system &&
+      room.createdBy === state.me.username
+    );
+  }
+
+  function renderRooms() {
+    elements.roomList.innerHTML = "";
+    elements.guestRoomSelect.innerHTML = "";
+
+    state.rooms.forEach(function (room) {
+      const roomButton = document.createElement("button");
+      roomButton.type = "button";
+      roomButton.className = `room-item${room.slug === state.activeRoom ? " is-active" : ""}`;
+      roomButton.dataset.roomSlug = room.slug;
+      roomButton.innerHTML = `
+        <strong>${escapeHtml(room.name)}</strong>
+        <span class="subtle-copy">${escapeHtml(room.description)}</span>
+        <div class="room-meta">
+          <span>${room.onlineCount || 0} online</span>
+          <span>${room.lastMessageAt ? formatTime({ timestamp: room.lastMessageAt }) : "Quiet"}</span>
+        </div>
+      `;
+      elements.roomList.appendChild(roomButton);
+
+      const option = document.createElement("option");
+      option.value = room.slug;
+      option.textContent = room.name;
+      option.selected = room.slug === state.activeRoom;
+      elements.guestRoomSelect.appendChild(option);
+    });
+
+    const activeRoom = roomBySlug(state.activeRoom) || state.rooms[0];
+    if (activeRoom) {
+      elements.activeRoomPill.textContent = `${activeRoom.name} room`;
+      elements.roomTitle.textContent = activeRoom.name;
+      elements.roomDescription.textContent = activeRoom.description;
+    }
+
+    elements.deleteRoomBtn.classList.toggle("hidden", !canManageActiveRoom());
+  }
+
+  function canDeleteMessage(message) {
+    const activeRoom = roomBySlug(state.activeRoom);
+    if (!state.me || !activeRoom || message.kind === "system") {
+      return false;
+    }
+
+    if (!state.me.isGuest && message.senderId && message.senderId === state.me.id) {
+      return true;
+    }
+
+    return canManageActiveRoom();
+  }
+
+  function renderMessages() {
+    elements.messages.innerHTML = "";
+
+    if (!state.messages.length) {
+      elements.messages.innerHTML = '<li class="empty-state">No messages yet. Start the energy.</li>';
+      return;
+    }
+
+    state.messages.forEach(function (message) {
+      const item = document.createElement("li");
+      item.className = `message-item ${message.kind}`;
+
+      const meta = document.createElement("div");
+      meta.className = "message-meta";
+
+      if (message.kind === "system") {
+        meta.innerHTML = `
+          <span class="room-role-tag">System</span>
+          <span class="time-label">${escapeHtml(formatTime(message))}</span>
+        `;
+      } else {
+        const userButton = document.createElement("button");
+        userButton.type = "button";
+        userButton.className = "username-button";
+        userButton.dataset.userTrigger = "true";
+        userButton.dataset.socketId = message.socketId || "";
+        userButton.dataset.username = message.username || "";
+        userButton.textContent = message.displayName || message.username || "User";
+
+        const left = document.createElement("div");
+        left.className = "message-meta";
+        left.style.justifyContent = "flex-start";
+        left.appendChild(userButton);
+
+        const role = document.createElement("span");
+        role.className = "message-role";
+        role.textContent = message.accountType === "registered" ? "Registered" : "Guest";
+        left.appendChild(role);
+
+        meta.appendChild(left);
+
+        const time = document.createElement("span");
+        time.className = "time-label";
+        time.textContent = formatTime(message);
+        meta.appendChild(time);
+      }
+
+      const body = document.createElement("div");
+      body.className = "message-bubble";
+      body.appendChild(meta);
+
+      const text = document.createElement("div");
+      text.className = "message-text";
+      text.textContent = message.message;
+      body.appendChild(text);
+
+      if (canDeleteMessage(message)) {
+        const actions = document.createElement("div");
+        actions.className = "message-actions";
+        actions.innerHTML = `
+          <button
+            type="button"
+            class="inline-action"
+            data-delete-message-id="${escapeHtml(message.id)}"
+          >Delete</button>
+        `;
+        body.appendChild(actions);
+      }
+
+      item.appendChild(body);
+      elements.messages.appendChild(item);
+    });
+
+    elements.messages.scrollTop = elements.messages.scrollHeight;
+  }
+
+  function renderUsers() {
+    elements.usersList.innerHTML = "";
+
+    const others = state.users.filter(function (user) {
+      return user.socketId !== state.currentSocketId;
+    });
+
+    if (!others.length) {
+      elements.usersList.innerHTML = '<li class="empty-state">Nobody else is here yet.</li>';
+      return;
+    }
+
+    others.forEach(function (user) {
+      const item = document.createElement("li");
+      item.className = "user-item";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "user-row";
+      button.dataset.userTrigger = "true";
+      button.dataset.socketId = user.socketId;
+      button.dataset.username = user.username;
+      button.innerHTML = `
+        <span class="user-dot"></span>
+        <span>
+          <strong>${escapeHtml(user.displayName || user.username)}</strong>
+          <span class="pm-meta">${escapeHtml(user.isGuest ? "Guest" : "Registered")}</span>
+        </span>
+      `;
+
+      item.appendChild(button);
+      elements.usersList.appendChild(item);
+    });
+  }
+
+  function renderPmFeed() {
+    elements.pmFeed.innerHTML = "";
+
+    if (state.me && state.me.isGuest) {
+      elements.pmFeed.innerHTML = '<li class="empty-state">Private messages unlock after creating an account.</li>';
+      return;
+    }
+
+    if (!state.pmFeed.length) {
+      elements.pmFeed.innerHTML = '<li class="empty-state">Private conversations from this session show up here.</li>';
+      return;
+    }
+
+    state.pmFeed.slice(-10).reverse().forEach(function (entry) {
+      const item = document.createElement("li");
+      item.className = "pm-entry";
+      item.innerHTML = `
+        <div class="pm-entry-header">
+          <strong>${escapeHtml(entry.from)}</strong>
+          <span class="pm-meta">${escapeHtml(formatTime(entry))}</span>
+        </div>
+        <div class="message-text">${escapeHtml(entry.message)}</div>
+      `;
+      elements.pmFeed.appendChild(item);
+    });
+  }
+
+  function renderTyping() {
+    if (!state.typingUsers.length) {
+      elements.typingIndicator.textContent = "";
+      return;
+    }
+
+    if (state.typingUsers.length === 1) {
+      elements.typingIndicator.textContent = `${state.typingUsers[0]} is typing...`;
+      return;
+    }
+
+    elements.typingIndicator.textContent = `${state.typingUsers.slice(0, 2).join(" and ")} are typing...`;
+  }
+
+  function openUserMenu(socketId, username, clientX, clientY) {
+    if (!socketId || socketId === state.currentSocketId) {
+      return;
+    }
+
+    state.selectedUser = { socketId, username };
+    elements.userMenuHeader.textContent = username;
+    elements.menuPmBtn.disabled = !state.me || !state.me.canPrivateMessage;
+    elements.userMenu.classList.remove("hidden");
+
+    const rect = elements.userMenu.getBoundingClientRect();
+    const x = Math.min(clientX, window.innerWidth - rect.width - 12);
+    const y = Math.min(clientY, window.innerHeight - rect.height - 12);
+    elements.userMenu.style.left = `${x}px`;
+    elements.userMenu.style.top = `${y}px`;
+  }
+
+  function closeUserMenu() {
+    elements.userMenu.classList.add("hidden");
+  }
+
+  function openModal(overlay) {
+    overlay.classList.remove("hidden");
+  }
+
+  function closeModal(overlay) {
+    overlay.classList.add("hidden");
+  }
+
+  function showChatShell() {
+    elements.authShell.classList.add("hidden");
+    elements.chatShell.classList.remove("hidden");
+    renderAccount();
+    renderRooms();
+    renderMessages();
+    renderUsers();
+    renderPmFeed();
+    renderTyping();
+    applyPreferences();
+  }
+
+  function showAuthShell() {
+    elements.chatShell.classList.add("hidden");
+    elements.authShell.classList.remove("hidden");
+    setActiveTab("guest");
+  }
+
+  function connectSocket(authPayload) {
+    if (state.socket) {
+      state.socket.disconnect();
+      state.socket = null;
+    }
+
+    const socket = io(backendUrl, {
+      auth: authPayload,
+      transports: ["websocket", "polling"]
+    });
+
+    state.socket = socket;
+
+    socket.on("session ready", function (payload) {
+      state.currentSocketId = payload.socketId;
+      state.me = payload.user;
+      state.rooms = payload.rooms || state.rooms;
+      applyPreferences();
+      renderAccount();
+      renderRooms();
+      renderPmFeed();
+      showChatShell();
+
+      const desiredRoom = roomBySlug(state.activeRoom) ? state.activeRoom : (state.rooms[0] && state.rooms[0].slug);
+      if (desiredRoom) {
+        joinRoom(desiredRoom);
+      }
+    });
+
+    socket.on("room list", function (rooms) {
+      state.rooms = rooms;
+      renderRooms();
+    });
+
+    socket.on("room history", function (payload) {
+      state.activeRoom = payload.room.slug;
+      localStorage.setItem(storageKeys.lastRoom, state.activeRoom);
+      state.messages = payload.messages || [];
+      renderRooms();
+      renderMessages();
+    });
+
+    socket.on("chat message", function (message) {
+      state.messages.push(message);
+      renderMessages();
+    });
+
+    socket.on("system message", function (message) {
+      state.messages.push(message);
+      renderMessages();
+    });
+
+    socket.on("message deleted", function (payload) {
+      if (payload.roomSlug !== state.activeRoom) {
+        return;
+      }
+
+      state.messages = state.messages.filter(function (message) {
+        return message.id !== payload.messageId;
+      });
+      renderMessages();
+    });
+
+    socket.on("user list", function (users) {
+      state.users = users;
+      renderUsers();
+    });
+
+    socket.on("typing update", function (typingUsers) {
+      state.typingUsers = Array.isArray(typingUsers) ? typingUsers : [];
+      renderTyping();
+    });
+
+    socket.on("private message", function (payload) {
+      state.pmFeed.push(payload);
+      savePmFeed();
+      renderPmFeed();
+      showToast(`Private message: ${payload.from}`, "success");
+    });
+
+    socket.on("preferences updated", function (preferences) {
+      if (!state.me) return;
+      state.me.preferences = preferences;
+      applyPreferences();
+    });
+
+    socket.on("room removed", function (payload) {
+      showToast("This room was removed.", "success");
+      if (payload.fallbackRoom) {
+        state.activeRoom = payload.fallbackRoom.slug;
+        joinRoom(payload.fallbackRoom.slug);
+      } else {
+        state.messages = [];
+        renderMessages();
+      }
+    });
+
+    socket.on("error message", function (message) {
+      showToast(message, "error");
+    });
+
+    socket.on("connect_error", function (error) {
+      if (state.token) {
+        logout(false);
+      } else {
+        showAuthShell();
+      }
+      showToast(error.message || "Unable to connect right now.", "error");
+    });
+  }
+
+  function joinRoom(roomSlug) {
+    if (!state.socket || !roomSlug) return;
+    state.activeRoom = roomSlug;
+    localStorage.setItem(storageKeys.lastRoom, roomSlug);
+    state.messages = [];
+    renderRooms();
+    renderMessages();
+    state.socket.emit("join room", { roomSlug });
+  }
+
+  function handleTypingInput() {
+    if (!state.socket || !state.me) return;
+
+    if (!state.isTyping) {
+      state.isTyping = true;
+      state.socket.emit("typing", { isTyping: true });
+    }
+
+    window.clearTimeout(state.typingTimer);
+    state.typingTimer = window.setTimeout(function () {
+      state.isTyping = false;
+      if (state.socket) {
+        state.socket.emit("typing", { isTyping: false });
+      }
+    }, 1000);
+  }
+
+  function stopTyping() {
+    state.isTyping = false;
+    window.clearTimeout(state.typingTimer);
+    if (state.socket) {
+      state.socket.emit("typing", { isTyping: false });
+    }
+  }
+
+  async function bootstrap() {
+    try {
+      const payload = await api("/api/bootstrap");
+      state.rooms = payload.rooms || [];
+
+      if (state.token && payload.currentUser) {
+        state.me = payload.currentUser;
+        connectSocket({ token: state.token });
+      } else if (state.token && !payload.currentUser) {
+        logout(false);
+      }
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+
+    const savedGuestName = localStorage.getItem(storageKeys.guestName) || "";
+    elements.guestName.value = savedGuestName;
+    renderRooms();
+    renderPmFeed();
+
+    if (!state.token && savedGuestName && state.rooms.length) {
+      connectSocket({ guestName: savedGuestName });
+      return;
+    }
+
+    if (!state.token) {
+      showAuthShell();
+    }
+  }
+
+  async function handleGuestJoin(event) {
+    event.preventDefault();
+
+    const guestName = elements.guestName.value.trim();
+    const roomSlug = elements.guestRoomSelect.value;
+
+    if (guestName.length < 2) {
+      showToast("Pick a guest name with at least 2 characters.", "error");
+      return;
+    }
+
+    localStorage.setItem(storageKeys.guestName, guestName);
+    state.activeRoom = roomSlug;
+    connectSocket({ guestName });
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+
+    try {
+      const payload = await api("/api/auth/login", {
+        method: "POST",
+        body: {
+          username: elements.loginUsername.value.trim(),
+          password: elements.loginPassword.value
+        }
+      });
+
+      state.token = payload.token;
+      localStorage.setItem(storageKeys.token, payload.token);
+      state.me = payload.user;
+      showToast("Welcome back.", "success");
+      connectSocket({ token: state.token });
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function handleRegister(event) {
+    event.preventDefault();
+
+    try {
+      const payload = await api("/api/auth/register", {
+        method: "POST",
+        body: {
+          displayName: elements.registerDisplayName.value.trim(),
+          username: elements.registerUsername.value.trim(),
+          password: elements.registerPassword.value
+        }
+      });
+
+      state.token = payload.token;
+      localStorage.setItem(storageKeys.token, payload.token);
+      state.me = payload.user;
+      showToast("Account created. You are in.", "success");
+      connectSocket({ token: state.token });
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function handleCreateRoom(event) {
+    event.preventDefault();
+
+    try {
+      const payload = await api("/api/rooms", {
+        method: "POST",
+        body: {
+          name: elements.roomNameInput.value.trim(),
+          description: elements.roomDescriptionInput.value.trim()
+        }
+      });
+
+      closeModal(elements.roomModalOverlay);
+      elements.roomForm.reset();
+      showToast(`Room created: ${payload.room.name}`, "success");
+      joinRoom(payload.room.slug);
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function handleSavePreferences(event) {
+    event.preventDefault();
+
+    try {
+      const payload = await api("/api/me/preferences", {
+        method: "PATCH",
+        body: {
+          preferences: {
+            fontFamily: elements.fontSelect.value,
+            accentColor: elements.accentColorInput.value,
+            bubbleColor: elements.bubbleColorInput.value,
+            backgroundStyle: elements.backgroundStyleSelect.value
+          }
+        }
+      });
+
+      state.me = payload.user;
+      applyPreferences();
+      closeModal(elements.preferencesModalOverlay);
+      showToast("Appearance updated.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  function logout(showMessage) {
+    stopTyping();
+    const wasGuest = Boolean(state.me && state.me.isGuest);
+
+    if (state.socket) {
+      state.socket.disconnect();
+      state.socket = null;
+    }
+
+    state.token = "";
+    state.me = null;
+    state.currentSocketId = "";
+    state.users = [];
+    state.messages = [];
+    state.typingUsers = [];
+    localStorage.removeItem(storageKeys.token);
+
+    if (wasGuest) {
+      localStorage.removeItem(storageKeys.guestName);
+    }
+
+    showAuthShell();
+
+    if (showMessage !== false) {
+      showToast("You left the chat.", "success");
+    }
+  }
+
+  function handleMessageSubmit(event) {
+    event.preventDefault();
+    if (!state.socket) return;
+
+    const message = elements.messageInput.value.trim();
+    if (!message) return;
+
+    state.socket.emit("chat message", { message });
+    elements.messageInput.value = "";
+    stopTyping();
+    elements.messageInput.focus();
+  }
+
+  function openPmModal() {
+    if (!state.selectedUser) return;
+
+    if (!state.me || !state.me.canPrivateMessage) {
+      showToast("Create an account to unlock private messages.", "error");
+      return;
+    }
+
+    elements.pmModalTitle.textContent = `Message ${state.selectedUser.username}`;
+    elements.pmMessage.value = "";
+    closeUserMenu();
+    openModal(elements.pmModalOverlay);
+    window.setTimeout(function () {
+      elements.pmMessage.focus();
+    }, 0);
+  }
+
+  function sendPrivateMessage() {
+    const message = elements.pmMessage.value.trim();
+    if (!state.socket || !state.selectedUser || !message) return;
+
+    state.socket.emit("private message", {
+      toSocketId: state.selectedUser.socketId,
+      message
+    });
+
+    closeModal(elements.pmModalOverlay);
+  }
+
+  async function handleDeleteRoom() {
+    const room = roomBySlug(state.activeRoom);
+    if (!room || !canManageActiveRoom()) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete "${room.name}" and its room history?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await api(`/api/rooms/${encodeURIComponent(room.slug)}`, {
+        method: "DELETE"
+      });
+
+      showToast(`Deleted room: ${room.name}`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  function handleMessageActions(event) {
+    const deleteButton = event.target.closest("[data-delete-message-id]");
+    if (!deleteButton || !state.socket) {
+      return;
+    }
+
+    const messageId = deleteButton.dataset.deleteMessageId;
+    state.socket.emit("delete message", { messageId });
+  }
+
+  function bindEvents() {
+    elements.authTabs.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-tab]");
+      if (!button) return;
+      setActiveTab(button.dataset.tab);
+    });
+
+    elements.guestForm.addEventListener("submit", handleGuestJoin);
+    elements.loginForm.addEventListener("submit", handleLogin);
+    elements.registerForm.addEventListener("submit", handleRegister);
+    elements.messageForm.addEventListener("submit", handleMessageSubmit);
+    elements.messageInput.addEventListener("input", handleTypingInput);
+    elements.messages.addEventListener("click", handleMessageActions);
+    elements.logoutBtn.addEventListener("click", function () {
+      logout(true);
+    });
+    elements.deleteRoomBtn.addEventListener("click", handleDeleteRoom);
+
+    elements.roomList.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-room-slug]");
+      if (!button) return;
+      joinRoom(button.dataset.roomSlug);
+    });
+
+    function userTriggerHandler(event) {
+      const button = event.target.closest("[data-user-trigger='true']");
+      if (!button) return;
+      event.preventDefault();
+      openUserMenu(
+        button.dataset.socketId,
+        button.dataset.username,
+        event.clientX,
+        event.clientY
+      );
+    }
+
+    elements.messages.addEventListener("click", userTriggerHandler);
+    elements.usersList.addEventListener("click", userTriggerHandler);
+
+    document.addEventListener("click", function (event) {
+      if (event.target.closest("[data-user-trigger='true']") || event.target.closest("#user-menu")) {
+        return;
+      }
+      closeUserMenu();
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        closeUserMenu();
+        closeModal(elements.pmModalOverlay);
+        closeModal(elements.roomModalOverlay);
+        closeModal(elements.preferencesModalOverlay);
+      }
+    });
+
+    elements.menuPmBtn.addEventListener("click", openPmModal);
+    elements.pmCancelBtn.addEventListener("click", function () {
+      closeModal(elements.pmModalOverlay);
+    });
+    elements.pmSendBtn.addEventListener("click", sendPrivateMessage);
+
+    elements.openRoomModalBtn.addEventListener("click", function () {
+      openModal(elements.roomModalOverlay);
+      window.setTimeout(function () {
+        elements.roomNameInput.focus();
+      }, 0);
+    });
+    elements.roomCancelBtn.addEventListener("click", function () {
+      closeModal(elements.roomModalOverlay);
+    });
+    elements.roomForm.addEventListener("submit", handleCreateRoom);
+
+    elements.openPreferencesBtn.addEventListener("click", function () {
+      applyPreferences();
+      openModal(elements.preferencesModalOverlay);
+    });
+    elements.preferencesCancelBtn.addEventListener("click", function () {
+      closeModal(elements.preferencesModalOverlay);
+    });
+    elements.preferencesForm.addEventListener("submit", handleSavePreferences);
+
+    [
+      elements.pmModalOverlay,
+      elements.roomModalOverlay,
+      elements.preferencesModalOverlay
+    ].forEach(function (overlay) {
+      overlay.addEventListener("click", function (event) {
+        if (event.target === overlay) {
+          closeModal(overlay);
+        }
+      });
+    });
+  }
+
+  bindEvents();
+  bootstrap();
+})();
