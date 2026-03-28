@@ -55,6 +55,8 @@
 
   const CALL_CARD_WIDTH = 196;
   const CALL_CARD_HEIGHT = 146;
+  const CALL_CARD_MIN_WIDTH = 160;
+  const CALL_CARD_MIN_HEIGHT = 120;
 
   const elements = {
     authShell: document.getElementById("auth-shell"),
@@ -408,13 +410,17 @@
     };
   }
 
-  function clampCallPosition(position) {
-    const maxX = Math.max(0, window.innerWidth - CALL_CARD_WIDTH - 18);
-    const maxY = Math.max(0, window.innerHeight - CALL_CARD_HEIGHT - 18);
+  function clampCallLayout(layout) {
+    const width = Math.max(CALL_CARD_MIN_WIDTH, Math.min(layout.width || CALL_CARD_WIDTH, window.innerWidth - 24));
+    const height = Math.max(CALL_CARD_MIN_HEIGHT, Math.min(layout.height || CALL_CARD_HEIGHT, window.innerHeight - 84));
+    const maxX = Math.max(0, window.innerWidth - width - 18);
+    const maxY = Math.max(0, window.innerHeight - height - 18);
 
     return {
-      x: Math.min(Math.max(position.x, 12), maxX),
-      y: Math.min(Math.max(position.y, 74), maxY)
+      x: Math.min(Math.max(layout.x, 12), maxX),
+      y: Math.min(Math.max(layout.y, 74), maxY),
+      width,
+      height
     };
   }
 
@@ -462,14 +468,20 @@
       card.className = `call-card${showVideo ? "" : " is-audio-only is-camera-off"}`;
       card.dataset.callSocketId = participant.socketId;
 
-      const position = clampCallPosition(
-        state.callLayout[participant.socketId] || getDefaultCallPosition(visiblePublishers.indexOf(participant))
+      const layout = clampCallLayout(
+        Object.assign(
+          {
+            width: CALL_CARD_WIDTH,
+            height: CALL_CARD_HEIGHT
+          },
+          state.callLayout[participant.socketId] || getDefaultCallPosition(visiblePublishers.indexOf(participant))
+        )
       );
-      state.callLayout[participant.socketId] = position;
-      card.style.left = `${position.x}px`;
-      card.style.top = `${position.y}px`;
-      card.style.width = `${CALL_CARD_WIDTH}px`;
-      card.style.height = `${CALL_CARD_HEIGHT}px`;
+      state.callLayout[participant.socketId] = layout;
+      card.style.left = `${layout.x}px`;
+      card.style.top = `${layout.y}px`;
+      card.style.width = `${layout.width}px`;
+      card.style.height = `${layout.height}px`;
 
       const dragBar = document.createElement("div");
       dragBar.className = "call-drag-bar";
@@ -486,6 +498,13 @@
               title="Stop publishing your camera"
             >X</button>
           ` : ""}
+          <button
+            type="button"
+            class="call-fullscreen-btn"
+            data-call-fullscreen="${escapeHtml(participant.socketId)}"
+            aria-label="Fullscreen camera"
+            title="Fullscreen camera"
+          >[]</button>
           <span class="call-drag-dot">::</span>
         </div>
       `;
@@ -556,16 +575,14 @@
         card.appendChild(controls);
       }
 
-      const meta = document.createElement("div");
-      meta.className = "call-meta";
-      meta.innerHTML = `
-        <div>
-          <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
-          <div class="call-role">${escapeHtml(participant.cameraEnabled ? "Camera Live" : "Camera Hidden")}</div>
-        </div>
-        <span class="room-role-tag">${escapeHtml(participant.micEnabled ? "Mic On" : "Mic Off")}</span>
-      `;
-      card.appendChild(meta);
+      const resizeHandle = document.createElement("button");
+      resizeHandle.type = "button";
+      resizeHandle.className = "call-resize-handle";
+      resizeHandle.dataset.callResizeHandle = "true";
+      resizeHandle.setAttribute("aria-label", "Resize camera");
+      resizeHandle.title = "Resize camera";
+      resizeHandle.textContent = "◢";
+      card.appendChild(resizeHandle);
       elements.callParticipants.appendChild(card);
     });
   }
@@ -675,9 +692,6 @@
 
     everyone.forEach(function (user) {
       const isSelf = user.socketId === state.currentSocketId;
-      const cameraStatus = user.isPublishing
-        ? (user.cameraEnabled ? "Cam live" : "Cam hidden")
-        : "Cam off";
       const item = document.createElement("li");
       item.className = "user-item";
 
@@ -690,8 +704,21 @@
                 <strong>${escapeHtml(user.displayName || user.username)}</strong>
                 <span class="user-badge-text">You</span>
                 ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
+                ${user.isPublishing ? `
+                  <button
+                    type="button"
+                    class="user-cam-btn inline"
+                    data-open-media-id="${escapeHtml(user.socketId)}"
+                    title="Open your camera window"
+                    aria-label="Open your camera window"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                      <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                    </svg>
+                  </button>
+                ` : ""}
               </span>
-              <span class="pm-meta">${escapeHtml(user.effectivePresenceStatus || "online")} · ${escapeHtml(cameraStatus)}</span>
             </div>
           ` : `
             <button
@@ -704,18 +731,25 @@
               <span class="user-name-line" style="${escapeHtml(styleFromPreferences(user.preferences))}">
                 <strong>${escapeHtml(user.displayName || user.username)}</strong>
                 ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
+                ${user.isPublishing ? `
+                  <span class="user-cam-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                      <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                    </svg>
+                  </span>
+                ` : ""}
               </span>
-              <span class="pm-meta">${escapeHtml(user.effectivePresenceStatus || "online")} · ${escapeHtml(cameraStatus)}</span>
             </button>
           `}
-          ${user.isPublishing ? `
+          ${user.isPublishing && !isSelf ? `
             <button
               type="button"
               class="user-cam-btn"
               data-open-media-id="${escapeHtml(user.socketId)}"
-              ${(!isSelf && !user.canViewCamera) ? "disabled" : ""}
-              title="${isSelf ? "Open your camera window" : `Open ${escapeHtml(user.displayName || user.username)}'s camera`}"
-              aria-label="${isSelf ? "Open your camera window" : `Open ${escapeHtml(user.displayName || user.username)} camera`}"
+              ${!user.canViewCamera ? "disabled" : ""}
+              title="Open ${escapeHtml(user.displayName || user.username)}'s camera"
+              aria-label="Open ${escapeHtml(user.displayName || user.username)} camera"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M15 10.5 19.5 7v10L15 13.5"></path>
@@ -2069,21 +2103,30 @@
   }
 
   function handleCallPointerDown(event) {
+    const resizeHandle = event.target.closest("[data-call-resize-handle='true']");
     const handle = event.target.closest("[data-call-drag-handle='true']");
-    const card = handle ? handle.closest("[data-call-socket-id]") : null;
+    const card = (resizeHandle || handle) ? (resizeHandle || handle).closest("[data-call-socket-id]") : null;
     if (!card) {
       return;
     }
 
     const socketId = card.dataset.callSocketId;
-    const currentPosition = state.callLayout[socketId] || { x: 0, y: 0 };
+    const currentPosition = state.callLayout[socketId] || {
+      x: 0,
+      y: 0,
+      width: CALL_CARD_WIDTH,
+      height: CALL_CARD_HEIGHT
+    };
     state.draggingCall = {
       socketId,
+      mode: resizeHandle ? "resize" : "move",
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       originX: currentPosition.x,
-      originY: currentPosition.y
+      originY: currentPosition.y,
+      originWidth: currentPosition.width || CALL_CARD_WIDTH,
+      originHeight: currentPosition.height || CALL_CARD_HEIGHT
     };
 
     card.classList.add("is-dragging");
@@ -2095,12 +2138,21 @@
       return;
     }
 
-    const nextPosition = clampCallPosition({
-      x: state.draggingCall.originX + (event.clientX - state.draggingCall.startX),
-      y: state.draggingCall.originY + (event.clientY - state.draggingCall.startY)
-    });
+    const nextLayout = state.draggingCall.mode === "resize"
+      ? clampCallLayout({
+          x: state.draggingCall.originX,
+          y: state.draggingCall.originY,
+          width: state.draggingCall.originWidth + (event.clientX - state.draggingCall.startX),
+          height: state.draggingCall.originHeight + (event.clientY - state.draggingCall.startY)
+        })
+      : clampCallLayout({
+          x: state.draggingCall.originX + (event.clientX - state.draggingCall.startX),
+          y: state.draggingCall.originY + (event.clientY - state.draggingCall.startY),
+          width: state.draggingCall.originWidth,
+          height: state.draggingCall.originHeight
+        });
 
-    state.callLayout[state.draggingCall.socketId] = nextPosition;
+    state.callLayout[state.draggingCall.socketId] = nextLayout;
     renderCallPanel();
   }
 
@@ -2174,6 +2226,17 @@
     elements.callParticipants.addEventListener("click", function (event) {
       if (event.target.closest("[data-close-local-camera='true']")) {
         leaveCall();
+        return;
+      }
+
+      const fullscreenButton = event.target.closest("[data-call-fullscreen]");
+      if (fullscreenButton) {
+        const card = fullscreenButton.closest("[data-call-socket-id]");
+        if (card && card.requestFullscreen) {
+          card.requestFullscreen().catch(function () {
+            showToast("Fullscreen was blocked by the browser.", "error");
+          });
+        }
         return;
       }
 

@@ -496,7 +496,11 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    persistenceMode: persistence ? persistence.mode : "booting",
+    databaseConfigured: Boolean(process.env.DATABASE_URL)
+  });
 });
 
 app.get("/api/bootstrap", (req, res) => {
@@ -1230,6 +1234,9 @@ async function start() {
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Persistence mode: ${persistence.mode}`);
+    if (persistence.mode === "file") {
+      console.warn("DATABASE_URL is not configured. Accounts and history can still wipe on redeploys.");
+    }
   });
 }
 
