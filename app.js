@@ -141,6 +141,9 @@
   if (elements.accountMenu && elements.accountMenu.parentElement !== document.body) {
     document.body.appendChild(elements.accountMenu);
   }
+  if (elements.userMenu && elements.userMenu.parentElement !== document.body) {
+    document.body.appendChild(elements.userMenu);
+  }
 
   function parseStoredJson(key, fallback) {
     try {
@@ -1438,6 +1441,7 @@
     elements.menuBlockBtn.disabled = !state.me || state.me.isGuest;
     elements.menuBlockBtn.textContent = user && user.isBlocked ? "Unblock user" : "Block user";
     elements.userMenu.classList.remove("hidden");
+    elements.userMenu.style.display = "grid";
 
     const rect = elements.userMenu.getBoundingClientRect();
     const x = Math.min(clientX, window.innerWidth - rect.width - 12);
@@ -1448,6 +1452,7 @@
 
   function closeUserMenu() {
     elements.userMenu.classList.add("hidden");
+    elements.userMenu.style.display = "";
   }
 
   function openAccountMenu() {
@@ -2824,6 +2829,7 @@
 
     elements.messages.addEventListener("click", userTriggerHandler);
     elements.usersList.addEventListener("click", userTriggerHandler);
+    elements.friendsList.addEventListener("click", userTriggerHandler);
 
     document.addEventListener("click", function (event) {
       if (event.target.closest("[data-user-trigger='true']") || event.target.closest("#user-menu")) {
