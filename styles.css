@@ -607,6 +607,33 @@ button:active {
   touch-action: none;
 }
 
+.call-drag-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.call-close-btn {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(251, 113, 133, 0.18);
+  color: #ffd7df;
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  box-shadow: none;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.call-close-btn:hover {
+  box-shadow: none;
+  background: rgba(251, 113, 133, 0.26);
+}
+
 .camera-status-btn {
   width: auto;
   min-width: 34px;
@@ -1007,6 +1034,10 @@ button:active {
   border: none;
   color: inherit;
   box-shadow: none;
+}
+
+.user-name-trigger.is-self {
+  cursor: default;
 }
 
 .user-name-line {

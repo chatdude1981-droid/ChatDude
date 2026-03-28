@@ -301,11 +301,12 @@
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
     elements.openPreferencesInlineBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
-    elements.joinAudioBtn.disabled = state.isPublishing;
+    elements.joinAudioBtn.disabled = false;
     elements.leaveCallBtn.disabled = !state.isPublishing;
     elements.joinAudioBtn.title = state.isPublishing
-      ? "Your camera is already published"
+      ? "Stop publishing your camera"
       : "Publish your camera";
+    elements.joinAudioBtn.classList.toggle("is-active", state.isPublishing);
     elements.leaveCallBtn.title = state.isPublishing ? "Stop publishing your camera" : "Your camera is not published";
     elements.pushToTalkBtn.disabled = !state.isPublishing;
     elements.pushToTalkBtn.title = state.isPublishing
@@ -467,7 +468,18 @@
       dragBar.dataset.callDragHandle = "true";
       dragBar.innerHTML = `
         <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
-        <span class="call-drag-dot">::</span>
+        <div class="call-drag-actions">
+          ${participant.socketId === state.currentSocketId ? `
+            <button
+              type="button"
+              class="call-close-btn"
+              data-close-local-camera="true"
+              aria-label="Close your camera"
+              title="Stop publishing your camera"
+            >X</button>
+          ` : ""}
+          <span class="call-drag-dot">::</span>
+        </div>
       `;
       card.appendChild(dragBar);
 
@@ -644,43 +656,56 @@
   function renderUsers() {
     elements.usersList.innerHTML = "";
 
-    const others = state.users.filter(function (user) {
-      return user.socketId !== state.currentSocketId;
-    });
+    const everyone = state.users.slice();
 
-    if (!others.length) {
-      elements.usersList.innerHTML = '<li class="empty-state">Nobody else is here yet.</li>';
+    if (!everyone.length) {
+      elements.usersList.innerHTML = '<li class="empty-state">Nobody is here yet.</li>';
       return;
     }
 
-    others.forEach(function (user) {
+    everyone.forEach(function (user) {
+      const isSelf = user.socketId === state.currentSocketId;
+      const cameraStatus = user.isPublishing
+        ? (user.cameraEnabled ? "Cam live" : "Cam hidden")
+        : "Cam off";
       const item = document.createElement("li");
       item.className = "user-item";
 
       item.innerHTML = `
         <div class="user-row">
           <span class="user-dot is-${escapeHtml(user.effectivePresenceStatus || "online")}"></span>
-          <button
-            type="button"
-            class="user-name-trigger"
-            data-user-trigger="true"
-            data-socket-id="${escapeHtml(user.socketId)}"
-            data-username="${escapeHtml(user.username)}"
-          >
-            <span class="user-name-line">
-              <strong>${escapeHtml(user.displayName || user.username)}</strong>
-              ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
-            </span>
-            <span class="pm-meta">${escapeHtml(user.effectivePresenceStatus || "online")}</span>
-          </button>
+          ${isSelf ? `
+            <div class="user-name-trigger is-self">
+              <span class="user-name-line">
+                <strong>${escapeHtml(user.displayName || user.username)}</strong>
+                <span class="user-badge-text">You</span>
+                ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
+              </span>
+              <span class="pm-meta">${escapeHtml(user.effectivePresenceStatus || "online")} · ${escapeHtml(cameraStatus)}</span>
+            </div>
+          ` : `
+            <button
+              type="button"
+              class="user-name-trigger"
+              data-user-trigger="true"
+              data-socket-id="${escapeHtml(user.socketId)}"
+              data-username="${escapeHtml(user.username)}"
+            >
+              <span class="user-name-line">
+                <strong>${escapeHtml(user.displayName || user.username)}</strong>
+                ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
+              </span>
+              <span class="pm-meta">${escapeHtml(user.effectivePresenceStatus || "online")} · ${escapeHtml(cameraStatus)}</span>
+            </button>
+          `}
           ${user.isPublishing ? `
             <button
               type="button"
               class="user-cam-btn"
               data-open-media-id="${escapeHtml(user.socketId)}"
-              ${user.canViewCamera ? "" : "disabled"}
-              title="Open ${escapeHtml(user.displayName || user.username)}'s camera"
-              aria-label="Open ${escapeHtml(user.displayName || user.username)} camera"
+              ${(!isSelf && !user.canViewCamera) ? "disabled" : ""}
+              title="${isSelf ? "Open your camera window" : `Open ${escapeHtml(user.displayName || user.username)}'s camera`}"
+              aria-label="${isSelf ? "Open your camera window" : `Open ${escapeHtml(user.displayName || user.username)} camera`}"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M15 10.5 19.5 7v10L15 13.5"></path>
@@ -2141,6 +2166,11 @@
     elements.callParticipants.addEventListener("pointerdown", handleCallPointerDown);
     elements.pmWindow.addEventListener("pointerdown", handlePmWindowPointerDown);
     elements.callParticipants.addEventListener("click", function (event) {
+      if (event.target.closest("[data-close-local-camera='true']")) {
+        leaveCall();
+        return;
+      }
+
       if (event.target.closest("[data-toggle-mic='true']")) {
         toggleLocalMicrophone();
         return;
@@ -2193,6 +2223,11 @@
       openPmInbox();
     });
     elements.joinAudioBtn.addEventListener("click", function () {
+      if (state.isPublishing) {
+        leaveCall();
+        return;
+      }
+
       startCall();
     });
     elements.leaveCallBtn.addEventListener("click", function () {
