@@ -791,13 +791,15 @@
         role.className = "message-role";
         role.innerHTML = message.accountType === "registered"
           ? verifiedBadgeMarkup()
-          : "Guest";
-        left.appendChild(role);
+          : "";
+        if (role.innerHTML) {
+          left.appendChild(role);
+        }
 
         meta.appendChild(left);
 
         const body = document.createElement("div");
-        body.className = `message-bubble${isOwnMessage ? " is-own-inline" : ""}`;
+        body.className = "message-bubble is-own-inline";
 
         const text = document.createElement("div");
         text.className = "message-text";
@@ -808,26 +810,12 @@
         bubbleTime.className = "time-label bubble-time";
         bubbleTime.textContent = formatTime(message);
 
-        if (isOwnMessage) {
-          const inlineRow = document.createElement("div");
-          inlineRow.className = "message-inline-row";
-          inlineRow.appendChild(meta);
-          inlineRow.appendChild(text);
-          inlineRow.appendChild(bubbleTime);
-          body.appendChild(inlineRow);
-        } else {
-          const time = document.createElement("span");
-          time.className = "time-label";
-          time.textContent = formatTime(message);
-          meta.appendChild(time);
-          body.appendChild(meta);
-
-          const textRow = document.createElement("div");
-          textRow.className = "message-text-row";
-          textRow.appendChild(text);
-          textRow.appendChild(bubbleTime);
-          body.appendChild(textRow);
-        }
+        const inlineRow = document.createElement("div");
+        inlineRow.className = "message-inline-row";
+        inlineRow.appendChild(meta);
+        inlineRow.appendChild(text);
+        inlineRow.appendChild(bubbleTime);
+        body.appendChild(inlineRow);
 
         item.appendChild(body);
         elements.messages.appendChild(item);
