@@ -216,6 +216,7 @@ function sanitizePreferences(preferences = {}) {
     backgroundStyle: backgrounds.includes(preferences.backgroundStyle)
       ? preferences.backgroundStyle
       : "aurora",
+    showJoinLeaveMessages: preferences.showJoinLeaveMessages !== false,
     privacy: {
       allowGuestCameraView: privacy.allowGuestCameraView !== false
     }

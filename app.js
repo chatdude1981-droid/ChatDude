@@ -128,6 +128,7 @@
     accentColorInput: document.getElementById("accent-color-input"),
     backgroundStyleSelect: document.getElementById("background-style-select"),
     allowGuestCameraView: document.getElementById("allow-guest-camera-view"),
+    showJoinLeaveMessages: document.getElementById("show-join-leave-messages"),
     blockedUsersList: document.getElementById("blocked-users-list"),
     toastStack: document.getElementById("toast-stack")
   };
@@ -255,7 +256,8 @@
     const preferences = (state.me && state.me.preferences) || {
       textColor: "#edf4ff",
       fontFamily: "Space Grotesk",
-      backgroundStyle: "aurora"
+      backgroundStyle: "aurora",
+      showJoinLeaveMessages: true
     };
 
     document.body.dataset.backgroundStyle = preferences.backgroundStyle;
@@ -264,9 +266,55 @@
     elements.accentColorInput.value = preferences.textColor;
     elements.backgroundStyleSelect.value = preferences.backgroundStyle;
     elements.allowGuestCameraView.checked = preferences.privacy?.allowGuestCameraView !== false;
+    elements.showJoinLeaveMessages.checked = preferences.showJoinLeaveMessages !== false;
     elements.messageInput.style.cssText = styleFromPreferences(preferences);
     elements.pmWindowInput.style.cssText = styleFromPreferences(preferences);
     renderBlockedUsers();
+  }
+
+  function showJoinLeaveMessagesEnabled() {
+    return !state.me || state.me.preferences?.showJoinLeaveMessages !== false;
+  }
+
+  function isPresenceSystemMessage(message) {
+    return Boolean(
+      message &&
+      message.kind === "system" &&
+      typeof message.message === "string" &&
+      /\b(joined|left) the room\b/i.test(message.message)
+    );
+  }
+
+  function playPmNotification() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+
+    try {
+      if (!state.pmAudioContext) {
+        state.pmAudioContext = new AudioContextClass();
+      }
+      const audioContext = state.pmAudioContext;
+      if (audioContext.state === "suspended") {
+        audioContext.resume().catch(function () {});
+      }
+      const now = audioContext.currentTime;
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, now);
+      oscillator.frequency.exponentialRampToValueAtTime(660, now + 0.18);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.24);
+    } catch (_error) {
+      // ignore notification sound failures
+    }
   }
 
   function styleFromPreferences(preferences) {
@@ -625,12 +673,16 @@
   function renderMessages() {
     elements.messages.innerHTML = "";
 
-    if (!state.messages.length) {
+    const visibleMessages = state.messages.filter(function (message) {
+      return showJoinLeaveMessagesEnabled() || !isPresenceSystemMessage(message);
+    });
+
+    if (!visibleMessages.length) {
       elements.messages.innerHTML = '<li class="empty-state">No messages yet. Start the energy.</li>';
       return;
     }
 
-    state.messages.forEach(function (message) {
+    visibleMessages.forEach(function (message) {
       const item = document.createElement("li");
       item.className = `message-item ${message.kind}`;
 
@@ -639,7 +691,6 @@
 
       if (message.kind === "system") {
         meta.innerHTML = `
-          <span class="room-role-tag">System</span>
           <span class="time-label">${escapeHtml(formatTime(message))}</span>
         `;
       } else {
@@ -1635,6 +1686,7 @@
       savePmFeed();
       if (payload.direction === "incoming" && payload.counterpartUsername !== state.activePmUser?.username) {
         state.pmUnread[payload.counterpartUsername] = Number(state.pmUnread[payload.counterpartUsername] || 0) + 1;
+        playPmNotification();
       }
       renderPmInbox();
       renderPmWindow();
@@ -1645,6 +1697,7 @@
       if (!state.me) return;
       state.me.preferences = preferences;
       applyPreferences();
+      renderMessages();
     });
 
     socket.on("presence updated", function (user) {
@@ -1969,6 +2022,7 @@
             fontFamily: elements.fontSelect.value,
             textColor: elements.accentColorInput.value,
             backgroundStyle: elements.backgroundStyleSelect.value,
+            showJoinLeaveMessages: elements.showJoinLeaveMessages.checked,
             privacy: {
               allowGuestCameraView: elements.allowGuestCameraView.checked
             }
