@@ -1051,6 +1051,7 @@ button:active {
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: space-between;
 }
 
 .user-cam-btn {
@@ -1146,6 +1147,8 @@ button:active {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex-wrap: nowrap;
 }
 
 .user-badge-text {

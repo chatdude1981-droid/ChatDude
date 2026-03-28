@@ -724,26 +724,28 @@
         <div class="user-row">
           <span class="user-dot is-${escapeHtml(user.effectivePresenceStatus || "online")}"></span>
           ${isSelf ? `
-            <div class="user-name-trigger is-self">
-              <span class="user-name-line" style="${escapeHtml(styleFromPreferences(user.preferences))}">
-                <strong>${escapeHtml(user.displayName || user.username)}</strong>
-                <span class="user-badge-text">You</span>
-                ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
-                ${user.isPublishing ? `
-                  <button
-                    type="button"
-                    class="user-cam-btn inline"
-                    data-open-media-id="${escapeHtml(user.socketId)}"
-                    title="Open your camera window"
-                    aria-label="Open your camera window"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M15 10.5 19.5 7v10L15 13.5"></path>
-                      <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
-                    </svg>
-                  </button>
-                ` : ""}
-              </span>
+            <div class="user-name-trigger-wrap">
+              <div class="user-name-trigger is-self">
+                <span class="user-name-line" style="${escapeHtml(styleFromPreferences(user.preferences))}">
+                  <strong>${escapeHtml(user.displayName || user.username)}</strong>
+                  <span class="user-badge-text">You</span>
+                  ${user.isGuest ? "" : verifiedBadgeMarkup()}
+                </span>
+              </div>
+              ${user.isPublishing ? `
+                <button
+                  type="button"
+                  class="user-cam-btn inline"
+                  data-open-media-id="${escapeHtml(user.socketId)}"
+                  title="Open your camera window"
+                  aria-label="Open your camera window"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                    <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                  </svg>
+                </button>
+              ` : ""}
             </div>
           ` : `
             <div class="user-name-trigger-wrap">
@@ -756,7 +758,7 @@
               >
                 <span class="user-name-line" style="${escapeHtml(styleFromPreferences(user.preferences))}">
                   <strong>${escapeHtml(user.displayName || user.username)}</strong>
-                  ${user.isGuest ? '<span class="user-badge-text">Guest</span>' : verifiedBadgeMarkup()}
+                  ${user.isGuest ? "" : verifiedBadgeMarkup()}
                 </span>
               </button>
               ${user.isPublishing ? `
