@@ -102,6 +102,8 @@
     userMenu: document.getElementById("user-menu"),
     userMenuHeader: document.getElementById("user-menu-header"),
     menuPmBtn: document.getElementById("menu-pm-btn"),
+    menuCallAudioBtn: document.getElementById("menu-call-audio-btn"),
+    menuCallVideoBtn: document.getElementById("menu-call-video-btn"),
     menuFriendBtn: document.getElementById("menu-friend-btn"),
     menuBlockBtn: document.getElementById("menu-block-btn"),
     pmWindow: document.getElementById("pm-window"),
@@ -1385,6 +1387,16 @@
     const user = state.users.find(function (entry) {
       return entry.socketId === socketId;
     });
+    const canCall = Boolean(
+      !state.me?.isGuest &&
+      state.me?.canPrivateMessage &&
+      user &&
+      user.socketId &&
+      privateCallsEnabledForCurrentUser() &&
+      privateCallsEnabledForUser(user)
+    );
+    elements.menuCallAudioBtn.disabled = !canCall;
+    elements.menuCallVideoBtn.disabled = !canCall;
     elements.menuFriendBtn.disabled = !state.me || state.me.isGuest;
     elements.menuFriendBtn.textContent = user && user.isFriend ? "Remove friend" : "Add friend";
     elements.menuBlockBtn.disabled = !state.me || state.me.isGuest;
@@ -2228,6 +2240,22 @@
     });
   }
 
+  function openPmCallFromMenu(mode) {
+    if (!state.selectedUser) {
+      return;
+    }
+
+    openPmConversation({
+      username: state.selectedUser.username,
+      displayName: state.selectedUser.username,
+      socketId: state.selectedUser.socketId
+    });
+
+    window.setTimeout(function () {
+      startPmCall(mode);
+    }, 0);
+  }
+
   function sendPrivateMessage() {
     const message = elements.pmWindowInput.value.trim();
     const targetUser = state.activePmUser ? getConversationTarget(state.activePmUser.username) : null;
@@ -2815,6 +2843,12 @@
     });
 
     elements.menuPmBtn.addEventListener("click", openPmModal);
+    elements.menuCallAudioBtn.addEventListener("click", function () {
+      openPmCallFromMenu("audio");
+    });
+    elements.menuCallVideoBtn.addEventListener("click", function () {
+      openPmCallFromMenu("video");
+    });
     elements.menuFriendBtn.addEventListener("click", toggleFriendUser);
     elements.menuBlockBtn.addEventListener("click", toggleBlockedUser);
     elements.pmWindowCloseBtn.addEventListener("click", closePmWindow);

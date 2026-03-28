@@ -153,7 +153,16 @@ body.has-split-call .page-shell {
 }
 
 body.has-split-call .chat-shell {
-  width: calc(50vw - 18px);
+  width: calc(50vw - 18px) !important;
+  max-width: calc(50vw - 18px);
+}
+
+body.has-split-call .topbar,
+body.has-split-call .app-grid,
+body.has-split-call .workspace,
+body.has-split-call .chat-panel {
+  width: 100%;
+  max-width: 100%;
 }
 
 .card {
@@ -835,6 +844,10 @@ body.has-split-call .chat-shell {
 body.has-split-call .call-card.is-maximized {
   inset: 10px 10px 10px calc(50vw + 6px);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.has-split-call .call-participants {
+  inset: 10px 10px 10px calc(50vw + 6px);
 }
 
 .call-card.is-maximized .call-drag-bar {
