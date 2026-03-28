@@ -913,26 +913,6 @@ body.has-split-call .chat-panel {
   min-width: 0;
 }
 
-.message-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.inline-action {
-  width: auto;
-  padding: 0.5rem 0.8rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: none;
-}
-
-.inline-action:hover {
-  color: var(--text);
-}
-
 .message-text {
   line-height: 1.52;
   white-space: pre-wrap;

@@ -678,19 +678,6 @@
     });
   }
 
-  function canDeleteMessage(message) {
-    const activeRoom = roomBySlug(state.activeRoom);
-    if (!state.me || !activeRoom || message.kind === "system") {
-      return false;
-    }
-
-    if (!state.me.isGuest && message.senderId && message.senderId === state.me.id) {
-      return true;
-    }
-
-    return canManageActiveRoom();
-  }
-
   function renderMessages() {
     elements.messages.innerHTML = "";
 
@@ -794,19 +781,6 @@
           textRow.appendChild(text);
           textRow.appendChild(bubbleTime);
           body.appendChild(textRow);
-        }
-
-        if (canDeleteMessage(message)) {
-          const actions = document.createElement("div");
-          actions.className = "message-actions";
-          actions.innerHTML = `
-            <button
-              type="button"
-              class="inline-action"
-              data-delete-message-id="${escapeHtml(message.id)}"
-            >Delete</button>
-          `;
-          body.appendChild(actions);
         }
 
         item.appendChild(body);
@@ -2246,16 +2220,6 @@
     }
   }
 
-  function handleMessageActions(event) {
-    const deleteButton = event.target.closest("[data-delete-message-id]");
-    if (!deleteButton || !state.socket) {
-      return;
-    }
-
-    const messageId = deleteButton.dataset.deleteMessageId;
-    state.socket.emit("delete message", { messageId });
-  }
-
   function openPublishedMedia(socketId) {
     if (!state.socket || !socketId) {
       return;
@@ -2558,7 +2522,6 @@
     elements.messageInput.addEventListener("input", function () {
       sendActivityPing(false);
     });
-    elements.messages.addEventListener("click", handleMessageActions);
     elements.callParticipants.addEventListener("pointerdown", handleCallPointerDown);
     elements.callParticipants.addEventListener("pointerdown", function (event) {
       if (event.target.closest("[data-close-local-camera='true'], [data-close-remote-camera], [data-call-fullscreen], [data-toggle-mic='true'], [data-toggle-camera='true'], [data-toggle-remote-mute], [data-remote-volume]")) {
@@ -2768,6 +2731,14 @@
     elements.menuBlockBtn.addEventListener("click", toggleBlockedUser);
     elements.pmWindowCloseBtn.addEventListener("click", closePmWindow);
     elements.pmWindowForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      sendPrivateMessage();
+    });
+    elements.pmWindowInput.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" || event.shiftKey) {
+        return;
+      }
+
       event.preventDefault();
       sendPrivateMessage();
     });
