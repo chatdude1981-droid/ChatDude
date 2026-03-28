@@ -226,6 +226,7 @@ function findUserByUsername(username) {
 function sanitizePreferences(preferences = {}) {
   const fonts = ["Space Grotesk", "DM Sans", "Manrope", "IBM Plex Sans"];
   const backgrounds = ["aurora", "midnight", "sunrise"];
+  const privacy = preferences.privacy || {};
 
   return {
     accentColor: /^#[0-9a-fA-F]{6}$/.test(preferences.accentColor || "")
@@ -239,8 +240,19 @@ function sanitizePreferences(preferences = {}) {
       : "Space Grotesk",
     backgroundStyle: backgrounds.includes(preferences.backgroundStyle)
       ? preferences.backgroundStyle
-      : "aurora"
+      : "aurora",
+    privacy: {
+      allowGuestCameraView: privacy.allowGuestCameraView !== false
+    }
   };
+}
+
+function sanitizeBlockedUsers(blockedUsers = []) {
+  return Array.from(new Set(
+    blockedUsers
+      .map((username) => normalizeUsername(String(username || "")))
+      .filter((username) => isValidUsername(username))
+  ));
 }
 
 function toPublicUser(user) {
@@ -249,7 +261,8 @@ function toPublicUser(user) {
     username: user.username,
     displayName: user.displayName,
     accountType: "registered",
-    preferences: sanitizePreferences(user.preferences || {})
+    preferences: sanitizePreferences(user.preferences || {}),
+    blockedUsers: sanitizeBlockedUsers(user.blockedUsers || [])
   };
 }
 
@@ -263,7 +276,8 @@ function serializeSession(session) {
     canCustomize: session.accountType === "registered",
     canCreateRooms: session.accountType === "registered",
     canPrivateMessage: session.accountType === "registered",
-    preferences: sanitizePreferences(session.preferences || {})
+    preferences: sanitizePreferences(session.preferences || {}),
+    blockedUsers: sanitizeBlockedUsers(session.blockedUsers || [])
   };
 }
 
@@ -335,7 +349,32 @@ function savePrivateMessage(message) {
   saveStore(store);
 }
 
-function getUsersInRoom(roomSlug) {
+function sessionBlocksUsername(session, username) {
+  const blockedUsers = sanitizeBlockedUsers(session?.blockedUsers || []);
+  return blockedUsers.includes(username);
+}
+
+function canViewerAccessPublisher(viewerSession, publisherSession) {
+  if (!viewerSession || !publisherSession) {
+    return false;
+  }
+
+  if (sessionBlocksUsername(publisherSession, viewerSession.username)) {
+    return false;
+  }
+
+  if (sessionBlocksUsername(viewerSession, publisherSession.username)) {
+    return false;
+  }
+
+  if (viewerSession.accountType === "guest" && publisherSession.accountType === "registered") {
+    return sanitizePreferences(publisherSession.preferences || {}).privacy.allowGuestCameraView;
+  }
+
+  return true;
+}
+
+function getUsersInRoom(roomSlug, viewerSession) {
   return Array.from(onlineUsers.entries())
     .filter(([, session]) => session.roomSlug === roomSlug)
     .map(([socketId, session]) => ({
@@ -346,14 +385,16 @@ function getUsersInRoom(roomSlug) {
       accountType: session.accountType,
       isGuest: session.accountType === "guest",
       isPublishing: Boolean(session.isPublishing),
-      cameraEnabled: Boolean(session.cameraEnabled)
+      cameraEnabled: Boolean(session.cameraEnabled),
+      canViewCamera: Boolean(session.isPublishing && canViewerAccessPublisher(viewerSession, session)),
+      isBlocked: Boolean(sessionBlocksUsername(viewerSession, session.username))
     }))
     .sort((a, b) => a.username.localeCompare(b.username));
 }
 
-function getPublishedMediaInRoom(roomSlug) {
+function getPublishedMediaInRoom(roomSlug, viewerSession) {
   return Array.from(onlineUsers.entries())
-    .filter(([, session]) => session.roomSlug === roomSlug && session.isPublishing)
+    .filter(([, session]) => session.roomSlug === roomSlug && session.isPublishing && canViewerAccessPublisher(viewerSession, session))
     .map(([socketId, session]) => ({
       socketId,
       username: session.username,
@@ -364,7 +405,11 @@ function getPublishedMediaInRoom(roomSlug) {
 }
 
 function updateUserList(roomSlug) {
-  io.to(roomSlug).emit("user list", getUsersInRoom(roomSlug));
+  Array.from(onlineUsers.entries())
+    .filter(([, session]) => session.roomSlug === roomSlug)
+    .forEach(([socketId, session]) => {
+      io.to(socketId).emit("user list", getUsersInRoom(roomSlug, session));
+    });
 }
 
 function emitRoomList() {
@@ -372,10 +417,14 @@ function emitRoomList() {
 }
 
 function emitMediaState(roomSlug) {
-  io.to(roomSlug).emit("room media state", {
-    roomSlug,
-    publishers: getPublishedMediaInRoom(roomSlug)
-  });
+  Array.from(onlineUsers.entries())
+    .filter(([, session]) => session.roomSlug === roomSlug)
+    .forEach(([socketId, session]) => {
+      io.to(socketId).emit("room media state", {
+        roomSlug,
+        publishers: getPublishedMediaInRoom(roomSlug, session)
+      });
+    });
 }
 
 function getRoomBySlug(roomSlug) {
@@ -469,7 +518,8 @@ app.post("/api/auth/register", (req, res) => {
     displayName: displayName.slice(0, 24),
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
-    preferences: sanitizePreferences({})
+    preferences: sanitizePreferences({}),
+    blockedUsers: []
   };
 
   store.users.push(user);
@@ -523,11 +573,68 @@ app.patch("/api/me/preferences", requireAuth, (req, res) => {
     if (session.id === req.user.id) {
       onlineUsers.set(socketId, {
         ...session,
-        preferences: req.user.preferences
+        preferences: req.user.preferences,
+        blockedUsers: sanitizeBlockedUsers(req.user.blockedUsers || [])
       });
       io.to(socketId).emit("preferences updated", sanitizePreferences(req.user.preferences));
     }
   }
+
+  res.json({
+    user: toPublicUser(req.user)
+  });
+});
+
+app.patch("/api/me/blocks", requireAuth, (req, res) => {
+  const username = normalizeUsername(req.body.username || "");
+  const action = req.body.action === "remove" ? "remove" : "add";
+
+  if (!isValidUsername(username)) {
+    res.status(400).json({ error: "Choose a valid username to block." });
+    return;
+  }
+
+  if (username.toLowerCase() === req.user.username.toLowerCase()) {
+    res.status(400).json({ error: "You cannot block yourself." });
+    return;
+  }
+
+  const existingTarget = findUserByUsername(username) || Array.from(onlineUsers.values()).find((session) => session.username.toLowerCase() === username.toLowerCase());
+  if (!existingTarget) {
+    res.status(404).json({ error: "That user could not be found." });
+    return;
+  }
+
+  const blockedUsers = new Set(sanitizeBlockedUsers(req.user.blockedUsers || []));
+  if (action === "add") {
+    blockedUsers.add(username);
+  } else {
+    blockedUsers.delete(username);
+  }
+
+  req.user.blockedUsers = Array.from(blockedUsers);
+  saveStore(store);
+
+  for (const [socketId, session] of onlineUsers.entries()) {
+    if (session.id === req.user.id) {
+      onlineUsers.set(socketId, {
+        ...session,
+        blockedUsers: req.user.blockedUsers
+      });
+    }
+  }
+
+  const affectedRooms = new Set(
+    Array.from(onlineUsers.values())
+      .filter((session) => session.username === req.user.username || session.username === username)
+      .map((session) => session.roomSlug)
+      .filter(Boolean)
+  );
+
+  affectedRooms.forEach((roomSlug) => {
+    updateUserList(roomSlug);
+    emitMediaState(roomSlug);
+  });
 
   res.json({
     user: toPublicUser(req.user)
@@ -624,6 +731,7 @@ io.use((socket, next) => {
         displayName: user.displayName,
         accountType: "registered",
         preferences: sanitizePreferences(user.preferences || {}),
+        blockedUsers: sanitizeBlockedUsers(user.blockedUsers || []),
         roomSlug: null,
         isPublishing: false,
         cameraEnabled: false,
@@ -645,6 +753,7 @@ io.use((socket, next) => {
       displayName: guestName.slice(0, 20),
       accountType: "guest",
       preferences: sanitizePreferences({}),
+      blockedUsers: [],
       roomSlug: null,
       isPublishing: false,
       cameraEnabled: false,
@@ -774,6 +883,11 @@ io.on("connection", (socket) => {
 
     if (!currentSession || !recipientSession || !trimmed) return;
 
+    if (sessionBlocksUsername(recipientSession, currentSession.username) || sessionBlocksUsername(currentSession, recipientSession.username)) {
+      socket.emit("error message", "This user is not available for private messages.");
+      return;
+    }
+
     if (currentSession.accountType !== "registered") {
       socket.emit("error message", "Guests can join rooms, but private messages are for registered users.");
       return;
@@ -803,11 +917,6 @@ io.on("connection", (socket) => {
   socket.on("start publishing", () => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession || !currentSession.roomSlug) return;
-
-    if (currentSession.accountType !== "registered") {
-      socket.emit("error message", "Camera publishing is available for registered users.");
-      return;
-    }
 
     currentSession.isPublishing = true;
     currentSession.cameraEnabled = true;
@@ -846,6 +955,7 @@ io.on("connection", (socket) => {
     if (!currentSession || !targetSession) return;
     if (currentSession.roomSlug !== targetSession.roomSlug) return;
     if (!targetSession.isPublishing) return;
+    if (!canViewerAccessPublisher(currentSession, targetSession)) return;
 
     io.to(toSocketId).emit("media view requested", {
       viewerSocketId: socket.id,

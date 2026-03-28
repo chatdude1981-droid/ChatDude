@@ -30,10 +30,14 @@
     micEnabled: false,
     peerConnections: new Map(),
     remoteStreams: new Map(),
+    remoteSettings: {},
     openMediaIds: new Set(),
     callLayout: {},
     draggingCall: null
   };
+
+  const CALL_CARD_WIDTH = 196;
+  const CALL_CARD_HEIGHT = 146;
 
   const elements = {
     authShell: document.getElementById("auth-shell"),
@@ -78,6 +82,7 @@
     userMenu: document.getElementById("user-menu"),
     userMenuHeader: document.getElementById("user-menu-header"),
     menuPmBtn: document.getElementById("menu-pm-btn"),
+    menuBlockBtn: document.getElementById("menu-block-btn"),
     pmModalOverlay: document.getElementById("pm-modal-overlay"),
     pmModalTitle: document.getElementById("pm-modal-title"),
     pmMessage: document.getElementById("pm-message"),
@@ -95,6 +100,8 @@
     accentColorInput: document.getElementById("accent-color-input"),
     bubbleColorInput: document.getElementById("bubble-color-input"),
     backgroundStyleSelect: document.getElementById("background-style-select"),
+    allowGuestCameraView: document.getElementById("allow-guest-camera-view"),
+    blockedUsersList: document.getElementById("blocked-users-list"),
     toastStack: document.getElementById("toast-stack")
   };
 
@@ -115,6 +122,23 @@
     const div = document.createElement("div");
     div.textContent = String(value ?? "");
     return div.innerHTML;
+  }
+
+  function verifiedBadgeMarkup() {
+    return '<span class="verified-badge" title="Verified account" aria-label="Verified account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.75 11.25 15 15.75 9.75"></path><path d="M12 3l2.3 2.1 3.1.2.9 3 2.5 1.8-1 3 1 3-2.5 1.8-.9 3-3.1.2L12 21l-2.3-2.1-3.1-.2-.9-3L3.2 13.9l1-3-1-3 2.5-1.8.9-3 3.1-.2L12 3z"></path></svg></span>';
+  }
+
+  function iconMarkup(name) {
+    const icons = {
+      mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M19 10a7 7 0 0 1-14 0"></path><path d="M12 17v4"></path><path d="M8 21h8"></path></svg>',
+      micOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16"></path><path d="M9.5 9.5V11a2.5 2.5 0 0 0 4.24 1.77"></path><path d="M12 3a3 3 0 0 1 3 3v2.5"></path><path d="M19 10a7 7 0 0 1-11.11 5.69"></path><path d="M12 17v4"></path><path d="M8 21h8"></path></svg>',
+      camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l4.5-3v10L15 14"></path><rect x="3" y="6.5" width="12" height="11" rx="2"></rect></svg>',
+      cameraOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16"></path><path d="M15 10l4.5-3v10L15 14"></path><path d="M10.5 6.5H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"></path></svg>',
+      volume: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18 6a8.5 8.5 0 0 1 0 12"></path></svg>',
+      volumeOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"></path><path d="M16 9l5 5"></path><path d="M21 9l-5 5"></path></svg>'
+    };
+
+    return icons[name] || "";
   }
 
   function formatTime(payload) {
@@ -212,6 +236,28 @@
     elements.accentColorInput.value = preferences.accentColor;
     elements.bubbleColorInput.value = preferences.bubbleColor;
     elements.backgroundStyleSelect.value = preferences.backgroundStyle;
+    elements.allowGuestCameraView.checked = preferences.privacy?.allowGuestCameraView !== false;
+    renderBlockedUsers();
+  }
+
+  function renderBlockedUsers() {
+    const blockedUsers = (state.me && state.me.blockedUsers) || [];
+    elements.blockedUsersList.innerHTML = "";
+
+    if (!blockedUsers.length) {
+      elements.blockedUsersList.textContent = "No blocked users.";
+      return;
+    }
+
+    blockedUsers.forEach(function (username) {
+      const chip = document.createElement("div");
+      chip.className = "blocked-user-chip";
+      chip.innerHTML = `
+        <span>${escapeHtml(username)}</span>
+        <button type="button" data-unblock-username="${escapeHtml(username)}">Unblock</button>
+      `;
+      elements.blockedUsersList.appendChild(chip);
+    });
   }
 
   function renderAccount() {
@@ -219,7 +265,7 @@
 
     const roleLabel = state.me.isGuest
       ? '<span>Guest account</span>'
-      : '<span class="verified-badge" title="Verified account" aria-label="Verified account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.75 11.25 15 15.75 9.75"></path><path d="M12 3l2.3 2.1 3.1.2.9 3 2.5 1.8-1 3 1 3-2.5 1.8-.9 3-3.1.2L12 21l-2.3-2.1-3.1-.2-.9-3L3.2 13.9l1-3-1-3 2.5-1.8.9-3 3.1-.2L12 3z"></path></svg></span>';
+      : verifiedBadgeMarkup();
     elements.sessionTitle.textContent = `${state.me.displayName || state.me.username} is live`;
     elements.accountBadge.innerHTML = `
       <strong>${escapeHtml(state.me.displayName || state.me.username)}</strong>
@@ -229,13 +275,11 @@
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
     elements.openPreferencesBtn.classList.toggle("hidden", !state.me.canCustomize);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
-    elements.joinAudioBtn.disabled = state.me.isGuest || state.isPublishing;
+    elements.joinAudioBtn.disabled = state.isPublishing;
     elements.leaveCallBtn.disabled = !state.isPublishing;
-    elements.joinAudioBtn.title = state.me.isGuest
-      ? "Create an account to publish your camera"
-      : state.isPublishing
-        ? "Your camera is already published"
-        : "Publish your camera";
+    elements.joinAudioBtn.title = state.isPublishing
+      ? "Your camera is already published"
+      : "Publish your camera";
     elements.leaveCallBtn.title = state.isPublishing ? "Stop publishing your camera" : "Your camera is not published";
     elements.pushToTalkBtn.disabled = !state.isPublishing;
     elements.pushToTalkBtn.title = state.isPublishing
@@ -309,19 +353,18 @@
     const row = Math.floor(index / 4);
 
     return {
-      x: 10 + (column * 144),
-      y: 10 + (row * 104)
+      x: 18 + (column * (CALL_CARD_WIDTH + 18)),
+      y: 92 + (row * (CALL_CARD_HEIGHT + 18))
     };
   }
 
   function clampCallPosition(position) {
-    const container = elements.callParticipants;
-    const maxX = Math.max(0, container.clientWidth - 136);
-    const maxY = Math.max(0, container.clientHeight - 96);
+    const maxX = Math.max(0, window.innerWidth - CALL_CARD_WIDTH - 18);
+    const maxY = Math.max(0, window.innerHeight - CALL_CARD_HEIGHT - 18);
 
     return {
-      x: Math.min(Math.max(position.x, 0), maxX),
-      y: Math.min(Math.max(position.y, 0), maxY)
+      x: Math.min(Math.max(position.x, 12), maxX),
+      y: Math.min(Math.max(position.y, 74), maxY)
     };
   }
 
@@ -367,7 +410,6 @@
     });
 
     if (!visiblePublishers.length) {
-      elements.callParticipants.innerHTML = '<div class="empty-state">No camera windows are open. Use the camera icon in the user list to open one.</div>';
       return;
     }
 
@@ -386,6 +428,8 @@
       state.callLayout[participant.socketId] = position;
       card.style.left = `${position.x}px`;
       card.style.top = `${position.y}px`;
+      card.style.width = `${CALL_CARD_WIDTH}px`;
+      card.style.height = `${CALL_CARD_HEIGHT}px`;
 
       const dragBar = document.createElement("div");
       dragBar.className = "call-drag-bar";
@@ -410,11 +454,14 @@
           avatar.textContent = initialFromName(participant.displayName || participant.username);
           card.appendChild(avatar);
         }
-      } else if (isVideo) {
+      } else if (remoteStream && participant.cameraEnabled) {
         const remoteVideo = document.createElement("video");
         remoteVideo.autoplay = true;
         remoteVideo.playsInline = true;
         remoteVideo.srcObject = remoteStream;
+        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: false };
+        remoteVideo.volume = remoteSettings.volume;
+        remoteVideo.muted = remoteSettings.muted;
         card.appendChild(remoteVideo);
       } else {
         const avatar = document.createElement("div");
@@ -427,12 +474,33 @@
         const controls = document.createElement("div");
         controls.className = "camera-controls";
         controls.innerHTML = `
-          <button type="button" class="camera-status-btn" data-toggle-mic="true">
-            ${state.micEnabled ? "Mute" : "Unmute"}
+          <button type="button" class="camera-status-btn icon-control" data-toggle-mic="true" title="${state.micEnabled ? "Mute microphone" : "Unmute microphone"}" aria-label="${state.micEnabled ? "Mute microphone" : "Unmute microphone"}">
+            ${iconMarkup(state.micEnabled ? "mic" : "micOff")}
           </button>
-          <button type="button" class="camera-status-btn" data-toggle-camera="true">
-            ${state.cameraEnabled ? "Hide Cam" : "Show Cam"}
+          <button type="button" class="camera-status-btn icon-control" data-toggle-camera="true" title="${state.cameraEnabled ? "Hide camera" : "Show camera"}" aria-label="${state.cameraEnabled ? "Hide camera" : "Show camera"}">
+            ${iconMarkup(state.cameraEnabled ? "camera" : "cameraOff")}
           </button>
+        `;
+        card.appendChild(controls);
+      } else if (remoteStream) {
+        const remoteSettings = state.remoteSettings[participant.socketId] || { volume: 1, muted: false };
+        const controls = document.createElement("div");
+        controls.className = "camera-controls";
+        controls.innerHTML = `
+          <button type="button" class="camera-status-btn icon-control" data-toggle-remote-mute="${escapeHtml(participant.socketId)}" title="${remoteSettings.muted ? "Unmute viewer audio" : "Mute viewer audio"}" aria-label="${remoteSettings.muted ? "Unmute viewer audio" : "Mute viewer audio"}">
+            ${iconMarkup(remoteSettings.muted ? "volumeOff" : "volume")}
+          </button>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value="${escapeHtml(remoteSettings.volume)}"
+            class="volume-slider"
+            title="Remote camera volume"
+            aria-label="Remote camera volume"
+            data-remote-volume="${escapeHtml(participant.socketId)}"
+          />
         `;
         card.appendChild(controls);
       }
@@ -442,7 +510,7 @@
       meta.innerHTML = `
         <div>
           <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
-          <div class="call-role">${escapeHtml(participant.socketId === state.currentSocketId ? "You" : participant.cameraEnabled ? "Camera Live" : "Camera Hidden")}</div>
+          <div class="call-role">${escapeHtml(participant.cameraEnabled ? "Camera Live" : "Camera Hidden")}</div>
         </div>
         <span class="room-role-tag">${escapeHtml(participant.micEnabled ? "Mic On" : "Mic Off")}</span>
       `;
@@ -501,7 +569,7 @@
         const role = document.createElement("span");
         role.className = "message-role";
         role.innerHTML = message.accountType === "registered"
-          ? '<span class="verified-badge" title="Verified account" aria-label="Verified account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.75 11.25 15 15.75 9.75"></path><path d="M12 3l2.3 2.1 3.1.2.9 3 2.5 1.8-1 3 1 3-2.5 1.8-.9 3-3.1.2L12 21l-2.3-2.1-3.1-.2-.9-3L3.2 13.9l1-3-1-3 2.5-1.8.9-3 3.1-.2L12 3z"></path></svg></span>'
+          ? verifiedBadgeMarkup()
           : "Guest";
         left.appendChild(role);
 
@@ -572,7 +640,7 @@
             <span class="pm-meta">${
               user.isGuest
                 ? "Guest"
-                : '<span class="verified-badge" title="Verified account" aria-label="Verified account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.75 11.25 15 15.75 9.75"></path><path d="M12 3l2.3 2.1 3.1.2.9 3 2.5 1.8-1 3 1 3-2.5 1.8-.9 3-3.1.2L12 21l-2.3-2.1-3.1-.2-.9-3L3.2 13.9l1-3-1-3 2.5-1.8.9-3 3.1-.2L12 3z"></path></svg></span>'
+                : verifiedBadgeMarkup()
             }</span>
           </button>
           ${user.isPublishing ? `
@@ -580,6 +648,7 @@
               type="button"
               class="user-cam-btn"
               data-open-media-id="${escapeHtml(user.socketId)}"
+              ${user.canViewCamera ? "" : "disabled"}
               title="Open ${escapeHtml(user.displayName || user.username)}'s camera"
               aria-label="Open ${escapeHtml(user.displayName || user.username)} camera"
             >
@@ -653,6 +722,7 @@
     }
 
     state.remoteStreams.delete(socketId);
+    delete state.remoteSettings[socketId];
   }
 
   function cleanupCallState() {
@@ -702,6 +772,10 @@
         ? event.streams[0]
         : new MediaStream([event.track]);
       state.remoteStreams.set(targetSocketId, stream);
+      state.remoteSettings[targetSocketId] = state.remoteSettings[targetSocketId] || {
+        volume: 1,
+        muted: false
+      };
       renderCallPanel();
     };
 
@@ -751,8 +825,8 @@
   }
 
   async function startCall() {
-    if (!state.me || state.me.isGuest) {
-      showToast("Create an account to publish your camera.", "error");
+    if (!state.me) {
+      showToast("Sign in or join as guest before publishing a camera.", "error");
       return;
     }
 
@@ -821,6 +895,11 @@
     state.selectedUser = { socketId, username };
     elements.userMenuHeader.textContent = username;
     elements.menuPmBtn.disabled = !state.me || !state.me.canPrivateMessage;
+    const user = state.users.find(function (entry) {
+      return entry.socketId === socketId;
+    });
+    elements.menuBlockBtn.disabled = !state.me || state.me.isGuest;
+    elements.menuBlockBtn.textContent = user && user.isBlocked ? "Unblock user" : "Block user";
     elements.userMenu.classList.remove("hidden");
 
     const rect = elements.userMenu.getBoundingClientRect();
@@ -1197,7 +1276,10 @@
             fontFamily: elements.fontSelect.value,
             accentColor: elements.accentColorInput.value,
             bubbleColor: elements.bubbleColorInput.value,
-            backgroundStyle: elements.backgroundStyleSelect.value
+            backgroundStyle: elements.backgroundStyleSelect.value,
+            privacy: {
+              allowGuestCameraView: elements.allowGuestCameraView.checked
+            }
           }
         }
       });
@@ -1327,6 +1409,35 @@
     }
   }
 
+  async function toggleBlockedUser() {
+    if (!state.selectedUser || !state.me || state.me.isGuest) {
+      return;
+    }
+
+    const selected = state.users.find(function (user) {
+      return user.socketId === state.selectedUser.socketId;
+    });
+    const action = selected && selected.isBlocked ? "remove" : "add";
+
+    try {
+      const payload = await api("/api/me/blocks", {
+        method: "PATCH",
+        body: {
+          username: state.selectedUser.username,
+          action
+        }
+      });
+
+      state.me = payload.user;
+      renderBlockedUsers();
+      renderAccount();
+      closeUserMenu();
+      showToast(action === "add" ? `Blocked ${state.selectedUser.username}` : `Unblocked ${state.selectedUser.username}`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
   function toggleLocalMicrophone() {
     if (!state.isPublishing || !state.localStream) {
       return;
@@ -1437,7 +1548,33 @@
 
       if (event.target.closest("[data-toggle-camera='true']")) {
         toggleLocalCamera();
+        return;
       }
+
+      const remoteMuteButton = event.target.closest("[data-toggle-remote-mute]");
+      if (remoteMuteButton) {
+        const socketId = remoteMuteButton.dataset.toggleRemoteMute;
+        const existing = state.remoteSettings[socketId] || { volume: 1, muted: false };
+        state.remoteSettings[socketId] = {
+          volume: existing.volume,
+          muted: !existing.muted
+        };
+        renderCallPanel();
+      }
+    });
+    elements.callParticipants.addEventListener("input", function (event) {
+      const volumeSlider = event.target.closest("[data-remote-volume]");
+      if (!volumeSlider) {
+        return;
+      }
+
+      const socketId = volumeSlider.dataset.remoteVolume;
+      const existing = state.remoteSettings[socketId] || { volume: 1, muted: false };
+      state.remoteSettings[socketId] = {
+        volume: Number(volumeSlider.value),
+        muted: existing.muted
+      };
+      renderCallPanel();
     });
     elements.logoutBtn.addEventListener("click", function () {
       logout(true);
@@ -1516,6 +1653,7 @@
     document.addEventListener("pointercancel", handleCallPointerUp);
 
     elements.menuPmBtn.addEventListener("click", openPmModal);
+    elements.menuBlockBtn.addEventListener("click", toggleBlockedUser);
     elements.pmCancelBtn.addEventListener("click", function () {
       closeModal(elements.pmModalOverlay);
     });
@@ -1540,6 +1678,18 @@
       closeModal(elements.preferencesModalOverlay);
     });
     elements.preferencesForm.addEventListener("submit", handleSavePreferences);
+    elements.blockedUsersList.addEventListener("click", function (event) {
+      const unblockButton = event.target.closest("[data-unblock-username]");
+      if (!unblockButton) {
+        return;
+      }
+
+      state.selectedUser = {
+        username: unblockButton.dataset.unblockUsername,
+        socketId: ""
+      };
+      toggleBlockedUser();
+    });
 
     [
       elements.pmModalOverlay,

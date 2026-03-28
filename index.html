@@ -236,6 +236,7 @@
   <div id="user-menu" class="menu hidden">
     <div id="user-menu-header" class="menu-header">User</div>
     <button id="menu-pm-btn" class="menu-action" type="button">Private message</button>
+    <button id="menu-block-btn" class="menu-action" type="button">Block user</button>
   </div>
 
   <div id="pm-modal-overlay" class="modal-overlay hidden">
@@ -281,7 +282,7 @@
     <div class="modal card">
       <div class="modal-header">
         <div>
-          <span class="eyebrow">Appearance</span>
+          <span class="eyebrow">Appearance & Privacy</span>
           <h3>Make ChatDude yours</h3>
         </div>
         <button id="preferences-cancel-btn" class="icon-button" type="button">Close</button>
@@ -314,7 +315,15 @@
             <option value="sunrise">Sunrise</option>
           </select>
         </label>
-        <button type="submit">Save appearance</button>
+        <label class="field checkbox-field">
+          <input id="allow-guest-camera-view" type="checkbox" checked />
+          <span>Allow guests to view my camera</span>
+        </label>
+        <div class="field">
+          <span>Blocked users</span>
+          <div id="blocked-users-list" class="blocked-users-list"></div>
+        </div>
+        <button type="submit">Save settings</button>
       </form>
     </div>
   </div>
