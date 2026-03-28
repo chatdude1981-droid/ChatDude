@@ -99,10 +99,12 @@
     messageInput: document.getElementById("message-input"),
     typingIndicator: document.getElementById("typing-indicator"),
     usersList: document.getElementById("users-list"),
+    friendsList: document.getElementById("friends-list"),
     pmFeed: document.getElementById("pm-feed"),
     userMenu: document.getElementById("user-menu"),
     userMenuHeader: document.getElementById("user-menu-header"),
     menuPmBtn: document.getElementById("menu-pm-btn"),
+    menuFriendBtn: document.getElementById("menu-friend-btn"),
     menuBlockBtn: document.getElementById("menu-block-btn"),
     pmWindow: document.getElementById("pm-window"),
     pmWindowTitle: document.getElementById("pm-window-title"),
@@ -128,7 +130,6 @@
     accentColorInput: document.getElementById("accent-color-input"),
     backgroundStyleSelect: document.getElementById("background-style-select"),
     allowGuestCameraView: document.getElementById("allow-guest-camera-view"),
-    showJoinLeaveMessages: document.getElementById("show-join-leave-messages"),
     allowPrivateCalls: document.getElementById("allow-private-calls"),
     blockedUsersList: document.getElementById("blocked-users-list"),
     toastStack: document.getElementById("toast-stack")
@@ -258,7 +259,6 @@
       textColor: "#edf4ff",
       fontFamily: "Space Grotesk",
       backgroundStyle: "aurora",
-      showJoinLeaveMessages: true,
       allowPrivateCalls: true
     };
 
@@ -268,15 +268,11 @@
     elements.accentColorInput.value = preferences.textColor;
     elements.backgroundStyleSelect.value = preferences.backgroundStyle;
     elements.allowGuestCameraView.checked = preferences.privacy?.allowGuestCameraView !== false;
-    elements.showJoinLeaveMessages.checked = preferences.showJoinLeaveMessages !== false;
     elements.allowPrivateCalls.checked = preferences.allowPrivateCalls !== false;
     elements.messageInput.style.cssText = styleFromPreferences(preferences);
     elements.pmWindowInput.style.cssText = styleFromPreferences(preferences);
     renderBlockedUsers();
-  }
-
-  function showJoinLeaveMessagesEnabled() {
-    return !state.me || state.me.preferences?.showJoinLeaveMessages !== false;
+    renderFriends();
   }
 
   function privateCallsEnabledForCurrentUser() {
@@ -285,15 +281,6 @@
 
   function privateCallsEnabledForUser(user) {
     return !user || user.preferences?.allowPrivateCalls !== false;
-  }
-
-  function isPresenceSystemMessage(message) {
-    return Boolean(
-      message &&
-      message.kind === "system" &&
-      typeof message.message === "string" &&
-      /\b(joined|left) the room\b/i.test(message.message)
-    );
   }
 
   function playPmNotification() {
@@ -361,6 +348,71 @@
       `;
       elements.blockedUsersList.appendChild(chip);
     });
+  }
+
+  function friendUsernames() {
+    return Array.isArray(state.me?.friends) ? state.me.friends : [];
+  }
+
+  function renderFriends() {
+    if (!elements.friendsList) {
+      return;
+    }
+
+    elements.friendsList.innerHTML = "";
+
+    if (!state.me || state.me.isGuest) {
+      elements.friendsList.innerHTML = '<li class="empty-state">Create an account to build a friends list.</li>';
+      return;
+    }
+
+    const friends = friendUsernames();
+    if (!friends.length) {
+      elements.friendsList.innerHTML = '<li class="empty-state">No friends yet. Use a user menu to add one.</li>';
+      return;
+    }
+
+    friends
+      .slice()
+      .sort(function (left, right) {
+        return left.localeCompare(right);
+      })
+      .forEach(function (username) {
+        const onlineFriend = state.users.find(function (user) {
+          return user.username === username;
+        });
+        const item = document.createElement("li");
+        item.className = "user-item";
+        item.innerHTML = `
+          <div class="user-row">
+            <span class="user-dot is-${escapeHtml(onlineFriend?.effectivePresenceStatus || "offline")}"></span>
+            <div class="user-name-trigger-wrap">
+              <div class="user-name-trigger is-self">
+                <span class="user-name-line">
+                  <strong>${escapeHtml(onlineFriend?.displayName || username)}</strong>
+                  ${onlineFriend && !onlineFriend.isGuest ? verifiedBadgeMarkup() : ""}
+                </span>
+                <span class="user-secondary-line">${escapeHtml(onlineFriend ? "Here now" : "Offline")}</span>
+              </div>
+              ${onlineFriend?.isPublishing ? `
+                <button
+                  type="button"
+                  class="user-cam-btn inline"
+                  data-open-media-id="${escapeHtml(onlineFriend.socketId)}"
+                  title="Open camera"
+                  aria-label="Open camera"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                    <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                  </svg>
+                </button>
+              ` : ""}
+            </div>
+          </div>
+        `;
+        elements.friendsList.appendChild(item);
+      });
   }
 
   function renderAccount() {
@@ -681,16 +733,12 @@
   function renderMessages() {
     elements.messages.innerHTML = "";
 
-    const visibleMessages = state.messages.filter(function (message) {
-      return showJoinLeaveMessagesEnabled() || !isPresenceSystemMessage(message);
-    });
-
-    if (!visibleMessages.length) {
+    if (!state.messages.length) {
       elements.messages.innerHTML = '<li class="empty-state">No messages yet. Start the energy.</li>';
       return;
     }
 
-    visibleMessages.forEach(function (message) {
+    state.messages.forEach(function (message) {
       const item = document.createElement("li");
       item.className = `message-item ${message.kind}`;
       const isOwnMessage = Boolean(
@@ -868,6 +916,8 @@
       `;
       elements.usersList.appendChild(item);
     });
+
+    renderFriends();
   }
 
   function getConversationUsername(entry) {
@@ -1349,6 +1399,8 @@
     const user = state.users.find(function (entry) {
       return entry.socketId === socketId;
     });
+    elements.menuFriendBtn.disabled = !state.me || state.me.isGuest;
+    elements.menuFriendBtn.textContent = user && user.isFriend ? "Remove friend" : "Add friend";
     elements.menuBlockBtn.disabled = !state.me || state.me.isGuest;
     elements.menuBlockBtn.textContent = user && user.isBlocked ? "Unblock user" : "Block user";
     elements.userMenu.classList.remove("hidden");
@@ -1774,6 +1826,13 @@
       renderMessages();
     });
 
+    socket.on("friends updated", function (friends) {
+      if (!state.me) return;
+      state.me.friends = Array.isArray(friends) ? friends : [];
+      renderUsers();
+      renderFriends();
+    });
+
     socket.on("presence updated", function (user) {
       state.me = user;
       renderAccount();
@@ -2102,7 +2161,6 @@
             fontFamily: elements.fontSelect.value,
             textColor: elements.accentColorInput.value,
             backgroundStyle: elements.backgroundStyleSelect.value,
-            showJoinLeaveMessages: elements.showJoinLeaveMessages.checked,
             allowPrivateCalls: elements.allowPrivateCalls.checked,
             privacy: {
               allowGuestCameraView: elements.allowGuestCameraView.checked
@@ -2316,6 +2374,35 @@
       renderAccount();
       closeUserMenu();
       showToast(action === "add" ? `Blocked ${state.selectedUser.username}` : `Unblocked ${state.selectedUser.username}`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function toggleFriendUser() {
+    if (!state.selectedUser || !state.me || state.me.isGuest) {
+      return;
+    }
+
+    const selected = state.users.find(function (user) {
+      return user.socketId === state.selectedUser.socketId;
+    });
+    const action = selected && selected.isFriend ? "remove" : "add";
+
+    try {
+      const payload = await api("/api/me/friends", {
+        method: "PATCH",
+        body: {
+          username: state.selectedUser.username,
+          action
+        }
+      });
+
+      state.me = payload.user;
+      renderAccount();
+      renderUsers();
+      closeUserMenu();
+      showToast(action === "add" ? `Added ${state.selectedUser.username} as a friend` : `Removed ${state.selectedUser.username} from friends`, "success");
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -2634,6 +2721,14 @@
         openPublishedMedia(openMediaButton.dataset.openMediaId);
       }
     });
+    elements.friendsList.addEventListener("click", function (event) {
+      const openMediaButton = event.target.closest("[data-open-media-id]");
+      if (openMediaButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        openPublishedMedia(openMediaButton.dataset.openMediaId);
+      }
+    });
     elements.pmFeed.addEventListener("click", function (event) {
       const button = event.target.closest("[data-open-pm-user]");
       if (!button) {
@@ -2728,6 +2823,7 @@
     });
 
     elements.menuPmBtn.addEventListener("click", openPmModal);
+    elements.menuFriendBtn.addEventListener("click", toggleFriendUser);
     elements.menuBlockBtn.addEventListener("click", toggleBlockedUser);
     elements.pmWindowCloseBtn.addEventListener("click", closePmWindow);
     elements.pmWindowForm.addEventListener("submit", function (event) {

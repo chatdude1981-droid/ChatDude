@@ -139,8 +139,14 @@ async function createPersistence(defaultRooms, options = {}) {
         password_hash TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL,
         preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
-        blocked_users JSONB NOT NULL DEFAULT '[]'::jsonb
+        blocked_users JSONB NOT NULL DEFAULT '[]'::jsonb,
+        friends JSONB NOT NULL DEFAULT '[]'::jsonb
       );
+    `);
+
+    await query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS friends JSONB NOT NULL DEFAULT '[]'::jsonb;
     `);
 
     await query(`
@@ -244,8 +250,8 @@ async function createPersistence(defaultRooms, options = {}) {
     for (const user of fileStore.users) {
       await query(
         `
-          INSERT INTO users (id, username, display_name, password_hash, created_at, preferences, blocked_users)
-          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+          INSERT INTO users (id, username, display_name, password_hash, created_at, preferences, blocked_users, friends)
+          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)
           ON CONFLICT (id) DO NOTHING
         `,
         [
@@ -255,7 +261,8 @@ async function createPersistence(defaultRooms, options = {}) {
           user.passwordHash,
           user.createdAt,
           toJson(user.preferences || {}),
-          toJson(user.blockedUsers || [])
+          toJson(user.blockedUsers || []),
+          toJson(user.friends || [])
         ]
       );
     }
@@ -338,7 +345,8 @@ async function createPersistence(defaultRooms, options = {}) {
         passwordHash: row.password_hash,
         createdAt: new Date(row.created_at).toISOString(),
         preferences: fromJson(row.preferences, {}),
-        blockedUsers: fromJson(row.blocked_users, [])
+        blockedUsers: fromJson(row.blocked_users, []),
+        friends: fromJson(row.friends, [])
       })),
       rooms: roomsResult.rows.map((row) => ({
         id: row.id,
@@ -414,17 +422,18 @@ async function createPersistence(defaultRooms, options = {}) {
     async updateUser(user) {
       await query(
         `
-          INSERT INTO users (id, username, display_name, password_hash, created_at, preferences, blocked_users)
-          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+          INSERT INTO users (id, username, display_name, password_hash, created_at, preferences, blocked_users, friends)
+          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)
           ON CONFLICT (id) DO UPDATE SET
             username = EXCLUDED.username,
             display_name = EXCLUDED.display_name,
             password_hash = EXCLUDED.password_hash,
             created_at = EXCLUDED.created_at,
             preferences = EXCLUDED.preferences,
-            blocked_users = EXCLUDED.blocked_users
+            blocked_users = EXCLUDED.blocked_users,
+            friends = EXCLUDED.friends
         `,
-        [user.id, user.username, user.displayName, user.passwordHash, user.createdAt, toJson(user.preferences || {}), toJson(user.blockedUsers || [])]
+        [user.id, user.username, user.displayName, user.passwordHash, user.createdAt, toJson(user.preferences || {}), toJson(user.blockedUsers || []), toJson(user.friends || [])]
       );
     },
     async createUser(user) {

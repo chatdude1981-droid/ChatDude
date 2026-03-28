@@ -181,10 +181,6 @@
                 <span>Allow guests to view my camera</span>
               </label>
               <label class="field checkbox-field">
-                <input id="show-join-leave-messages" type="checkbox" checked />
-                <span>Show join and leave messages</span>
-              </label>
-              <label class="field checkbox-field">
                 <input id="allow-private-calls" type="checkbox" checked />
                 <span>Allow private voice and video calls</span>
               </label>
@@ -244,10 +240,14 @@
           <section class="card people-panel">
             <div class="tab-strip sidebar-tabs" id="sidebar-tabs">
               <button class="tab-button is-active" data-sidebar-tab="users" type="button">Users</button>
+              <button class="tab-button" data-sidebar-tab="friends" type="button">Friends</button>
               <button class="tab-button" data-sidebar-tab="rooms" type="button">Rooms</button>
             </div>
             <div class="sidebar-tab-panel is-active" data-sidebar-panel="users">
               <ul id="users-list" class="users-list"></ul>
+            </div>
+            <div class="sidebar-tab-panel" data-sidebar-panel="friends">
+              <ul id="friends-list" class="users-list"></ul>
             </div>
             <div class="sidebar-tab-panel" data-sidebar-panel="rooms">
               <div id="room-list" class="room-list"></div>
@@ -280,6 +280,7 @@
   <div id="user-menu" class="menu hidden">
     <div id="user-menu-header" class="menu-header">User</div>
     <button id="menu-pm-btn" class="menu-action" type="button">Private message</button>
+    <button id="menu-friend-btn" class="menu-action" type="button">Add friend</button>
     <button id="menu-block-btn" class="menu-action" type="button">Block user</button>
   </div>
 

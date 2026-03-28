@@ -232,6 +232,19 @@ function sanitizeBlockedUsers(blockedUsers = []) {
   ));
 }
 
+function sanitizeFriends(friends = []) {
+  return Array.from(new Set(
+    friends
+      .map((username) => normalizeUsername(String(username || "")))
+      .filter((username) => isValidUsername(username))
+  ));
+}
+
+function sessionFriendsUsername(session, username) {
+  const friends = sanitizeFriends(session?.friends || []);
+  return friends.includes(normalizeUsername(String(username || "")));
+}
+
 function sanitizePresenceStatus(value) {
   return ["online", "busy"].includes(value) ? value : "online";
 }
@@ -263,7 +276,8 @@ function toPublicUser(user) {
     displayName: user.displayName,
     accountType: "registered",
     preferences: sanitizePreferences(user.preferences || {}),
-    blockedUsers: sanitizeBlockedUsers(user.blockedUsers || [])
+    blockedUsers: sanitizeBlockedUsers(user.blockedUsers || []),
+    friends: sanitizeFriends(user.friends || [])
   };
 }
 
@@ -280,7 +294,8 @@ function serializeSession(session) {
     presenceStatus: sanitizePresenceStatus(session.presenceStatus),
     effectivePresenceStatus: getEffectivePresenceStatus(session),
     preferences: sanitizePreferences(session.preferences || {}),
-    blockedUsers: sanitizeBlockedUsers(session.blockedUsers || [])
+    blockedUsers: sanitizeBlockedUsers(session.blockedUsers || []),
+    friends: sanitizeFriends(session.friends || [])
   };
 }
 
@@ -420,7 +435,8 @@ function getUsersInRoom(roomSlug, viewerSession) {
       isPublishing: Boolean(session.isPublishing),
       cameraEnabled: Boolean(session.cameraEnabled),
       canViewCamera: Boolean(session.isPublishing && canViewerAccessPublisher(viewerSession, session)),
-      isBlocked: Boolean(sessionBlocksUsername(viewerSession, session.username))
+      isBlocked: Boolean(sessionBlocksUsername(viewerSession, session.username)),
+      isFriend: Boolean(sessionFriendsUsername(viewerSession, session.username))
     }))
     .sort((a, b) => a.username.localeCompare(b.username));
 }
@@ -466,7 +482,10 @@ function getRoomBySlug(roomSlug) {
 
 function getRoomHistory(roomSlug) {
   return store.roomMessages
-    .filter((message) => message.roomSlug === roomSlug)
+    .filter((message) => (
+      message.roomSlug === roomSlug &&
+      !(message.kind === "system" && /\b(joined|left) the room\b/i.test(message.message || ""))
+    ))
     .slice(-MAX_ROOM_MESSAGES)
     .map((message) => buildMessagePayload(message, null));
 }
@@ -486,6 +505,65 @@ function canDeleteMessage(session, room, message) {
   }
 
   return canManageRoom({ username: session.username }, room);
+}
+
+function buildLiveSystemMessage(roomSlug, text) {
+  return buildMessagePayload({
+    id: crypto.randomUUID(),
+    kind: "system",
+    roomSlug,
+    message: text,
+    username: "ChatDude",
+    displayName: "ChatDude",
+    accountType: "system",
+    preferences: sanitizePreferences({}),
+    senderId: "system",
+    ...createTimestampPayload()
+  }, null);
+}
+
+function emitLiveSystemMessage(roomSlug, text, targetSocketIds) {
+  const payload = buildLiveSystemMessage(roomSlug, text);
+  const recipients = Array.isArray(targetSocketIds) && targetSocketIds.length
+    ? targetSocketIds
+    : Array.from(onlineUsers.entries())
+      .filter(([, session]) => session.roomSlug === roomSlug)
+      .map(([socketId]) => socketId);
+
+  recipients.forEach((socketId) => {
+    io.to(socketId).emit("system message", payload);
+  });
+}
+
+function notifyFriendsInRoom(roomSlug, enteringSession) {
+  const recipients = Array.from(onlineUsers.entries())
+    .filter(([socketId, session]) => (
+      socketId !== enteringSession.socketId &&
+      session.roomSlug === roomSlug &&
+      session.accountType === "registered" &&
+      sessionFriendsUsername(session, enteringSession.username) &&
+      !sessionBlocksUsername(session, enteringSession.username) &&
+      !sessionBlocksUsername(enteringSession, session.username)
+    ))
+    .map(([socketId]) => socketId);
+
+  if (recipients.length) {
+    emitLiveSystemMessage(roomSlug, `${enteringSession.displayName || enteringSession.username} entered the room`, recipients);
+  }
+}
+
+function notifyRoomCameraStart(roomSlug, session) {
+  const recipients = Array.from(onlineUsers.entries())
+    .filter(([socketId, otherSession]) => (
+      socketId !== session.socketId &&
+      otherSession.roomSlug === roomSlug &&
+      canViewerAccessPublisher(otherSession, session)
+    ))
+    .map(([socketId]) => socketId);
+
+  if (recipients.length) {
+    emitLiveSystemMessage(roomSlug, `${session.displayName || session.username} started broadcasting their camera`, recipients);
+  }
 }
 
 async function createSystemMessage(roomSlug, text) {
@@ -557,7 +635,8 @@ app.post("/api/auth/register", async (req, res) => {
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
     preferences: sanitizePreferences({}),
-    blockedUsers: []
+    blockedUsers: [],
+    friends: []
   };
 
   store.users.push(user);
@@ -615,6 +694,54 @@ app.patch("/api/me/preferences", requireAuth, async (req, res) => {
         blockedUsers: sanitizeBlockedUsers(req.user.blockedUsers || [])
       });
       io.to(socketId).emit("preferences updated", sanitizePreferences(req.user.preferences));
+    }
+  }
+
+  res.json({
+    user: toPublicUser(req.user)
+  });
+});
+
+app.patch("/api/me/friends", requireAuth, async (req, res) => {
+  const username = normalizeUsername(req.body.username || "");
+  const action = req.body.action === "remove" ? "remove" : "add";
+
+  if (!isValidUsername(username)) {
+    res.status(400).json({ error: "Choose a valid username to friend." });
+    return;
+  }
+
+  if (username.toLowerCase() === req.user.username.toLowerCase()) {
+    res.status(400).json({ error: "You cannot friend yourself." });
+    return;
+  }
+
+  const existingTarget = findUserByUsername(username) || Array.from(onlineUsers.values()).find((session) => session.username.toLowerCase() === username.toLowerCase());
+  if (!existingTarget) {
+    res.status(404).json({ error: "That user could not be found." });
+    return;
+  }
+
+  const friends = new Set(sanitizeFriends(req.user.friends || []));
+  if (action === "add") {
+    friends.add(username);
+  } else {
+    friends.delete(username);
+  }
+
+  req.user.friends = Array.from(friends);
+  await persistence.updateUser(req.user);
+
+  for (const [socketId, session] of onlineUsers.entries()) {
+    if (session.id === req.user.id) {
+      onlineUsers.set(socketId, {
+        ...session,
+        friends: req.user.friends
+      });
+      io.to(socketId).emit("friends updated", sanitizeFriends(req.user.friends));
+      if (session.roomSlug) {
+        updateUserList(session.roomSlug);
+      }
     }
   }
 
@@ -770,6 +897,7 @@ io.use((socket, next) => {
         accountType: "registered",
         preferences: sanitizePreferences(user.preferences || {}),
         blockedUsers: sanitizeBlockedUsers(user.blockedUsers || []),
+        friends: sanitizeFriends(user.friends || []),
         roomSlug: null,
         presenceStatus: "online",
         lastActiveAt: Date.now(),
@@ -794,6 +922,7 @@ io.use((socket, next) => {
       accountType: "guest",
       preferences: sanitizePreferences({}),
       blockedUsers: [],
+      friends: [],
       roomSlug: null,
       presenceStatus: "online",
       lastActiveAt: Date.now(),
@@ -828,6 +957,7 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession) return;
     touchSession(currentSession);
+    currentSession.socketId = socket.id;
 
     const previousRoom = currentSession.roomSlug;
     if (previousRoom === room.slug) {
@@ -860,12 +990,10 @@ io.on("connection", (socket) => {
     updateUserList(room.slug);
     emitMediaState(room.slug);
 
-  if (previousRoom && previousRoom !== room.slug) {
+    if (previousRoom && previousRoom !== room.slug) {
       updateUserList(previousRoom);
-      void createSystemMessage(previousRoom, `${currentSession.username} left the room`);
     }
-
-    void createSystemMessage(room.slug, `${currentSession.username} joined the room`);
+    notifyFriendsInRoom(room.slug, currentSession);
   });
 
   socket.on("chat message", async ({ message }) => {
@@ -1043,9 +1171,11 @@ io.on("connection", (socket) => {
     currentSession.isPublishing = true;
     currentSession.cameraEnabled = true;
     currentSession.micEnabled = true;
+    currentSession.socketId = socket.id;
     onlineUsers.set(socket.id, currentSession);
     updateUserList(currentSession.roomSlug);
     emitMediaState(currentSession.roomSlug);
+    notifyRoomCameraStart(currentSession.roomSlug, currentSession);
   });
 
   socket.on("stop publishing", () => {
@@ -1234,7 +1364,6 @@ io.on("connection", (socket) => {
     onlineUsers.delete(socket.id);
 
     if (currentSession?.roomSlug) {
-      void createSystemMessage(currentSession.roomSlug, `${currentSession.username} left the room`);
       updateUserList(currentSession.roomSlug);
       emitMediaState(currentSession.roomSlug);
     }

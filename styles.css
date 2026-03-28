@@ -1208,6 +1208,11 @@ body.has-split-call .chat-panel {
   flex-wrap: nowrap;
 }
 
+.user-secondary-line {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 .user-badge-text {
   font-size: 0.78rem;
   color: var(--muted);
@@ -1229,6 +1234,11 @@ body.has-split-call .chat-panel {
 .user-dot.is-idle {
   background: var(--muted);
   box-shadow: 0 0 18px rgba(156, 174, 199, 0.35);
+}
+
+.user-dot.is-offline {
+  background: rgba(115, 132, 156, 0.45);
+  box-shadow: none;
 }
 
 .typing-indicator {
