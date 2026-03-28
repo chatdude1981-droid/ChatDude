@@ -2322,13 +2322,13 @@
   }
 
   function handleCallPointerDown(event) {
-    const handle = event.target.closest("[data-call-drag-handle='true']");
-    const card = event.target.closest("[data-call-socket-id]");
-    if (!card) {
+    if (event.target.closest("button, input")) {
       return;
     }
 
-    if (!handle && event.target.closest("button, input")) {
+    const handle = event.target.closest("[data-call-drag-handle='true']");
+    const card = event.target.closest("[data-call-socket-id]");
+    if (!card) {
       return;
     }
 
