@@ -13,6 +13,7 @@
     me: null,
     rooms: [],
     activeRoom: localStorage.getItem(storageKeys.lastRoom) || "general",
+    pendingRoomSelection: true,
     socket: null,
     currentSocketId: "",
     users: [],
@@ -63,14 +64,11 @@
     loginForm: document.getElementById("login-form"),
     registerForm: document.getElementById("register-form"),
     guestName: document.getElementById("guest-name"),
-    guestRoomSelect: document.getElementById("guest-room-select"),
-    loginRoomSelect: document.getElementById("login-room-select"),
     loginUsername: document.getElementById("login-username"),
     loginPassword: document.getElementById("login-password"),
     registerDisplayName: document.getElementById("register-display-name"),
     registerUsername: document.getElementById("register-username"),
     registerPassword: document.getElementById("register-password"),
-    registerRoomSelect: document.getElementById("register-room-select"),
     sessionTitle: document.getElementById("session-title"),
     activeRoomPill: document.getElementById("active-room-pill"),
     accountBadge: document.getElementById("account-badge"),
@@ -86,10 +84,9 @@
     roomList: document.getElementById("room-list"),
     roomTitle: document.getElementById("room-title"),
     roomDescription: document.getElementById("room-description"),
-    callPanel: document.getElementById("media-panel"),
-    callStatusTitle: document.getElementById("call-status-title"),
-    callStatusNote: document.getElementById("call-status-note"),
     callParticipants: document.getElementById("call-participants"),
+    roomPickerOverlay: document.getElementById("room-picker-overlay"),
+    roomPickerList: document.getElementById("room-picker-list"),
     joinAudioBtn: document.getElementById("join-audio-btn"),
     leaveCallBtn: document.getElementById("leave-call-btn"),
     pushToTalkBtn: document.getElementById("push-to-talk-btn"),
@@ -335,9 +332,7 @@
 
   function renderRooms() {
     elements.roomList.innerHTML = "";
-    elements.guestRoomSelect.innerHTML = "";
-    elements.loginRoomSelect.innerHTML = "";
-    elements.registerRoomSelect.innerHTML = "";
+    elements.roomPickerList.innerHTML = "";
 
     state.rooms.forEach(function (room) {
       const roomButton = document.createElement("button");
@@ -354,17 +349,19 @@
       `;
       elements.roomList.appendChild(roomButton);
 
-      const option = document.createElement("option");
-      option.value = room.slug;
-      option.textContent = room.name;
-      option.selected = room.slug === state.activeRoom;
-      elements.guestRoomSelect.appendChild(option);
-
-      const loginOption = option.cloneNode(true);
-      elements.loginRoomSelect.appendChild(loginOption);
-
-      const registerOption = option.cloneNode(true);
-      elements.registerRoomSelect.appendChild(registerOption);
+      const pickerButton = document.createElement("button");
+      pickerButton.type = "button";
+      pickerButton.className = `room-item room-picker-item${room.slug === state.activeRoom ? " is-active" : ""}`;
+      pickerButton.dataset.pickRoomSlug = room.slug;
+      pickerButton.innerHTML = `
+        <strong>${escapeHtml(room.name)}</strong>
+        <span class="subtle-copy">${escapeHtml(room.description)}</span>
+        <div class="room-meta">
+          <span>${room.onlineCount || 0} online</span>
+          <span>${room.system ? "Default" : "Custom"}</span>
+        </div>
+      `;
+      elements.roomPickerList.appendChild(pickerButton);
     });
 
     const activeRoom = roomBySlug(state.activeRoom) || state.rooms[0];
@@ -375,6 +372,17 @@
     }
 
     elements.deleteRoomBtn.classList.toggle("hidden", !canManageActiveRoom());
+  }
+
+  function showRoomPicker() {
+    state.pendingRoomSelection = true;
+    elements.roomPickerOverlay.classList.remove("hidden");
+    renderRooms();
+  }
+
+  function hideRoomPicker() {
+    state.pendingRoomSelection = false;
+    elements.roomPickerOverlay.classList.add("hidden");
   }
 
   function initialFromName(name) {
@@ -413,27 +421,6 @@
   }
 
   function renderCallPanel() {
-    const canUseCalls = Boolean(state.me && !state.me.isGuest && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
-    const roomHasParticipants = state.mediaPublishers.length > 0;
-    const browserSupportsCalls = Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
-
-    if (!canUseCalls) {
-      elements.callStatusTitle.textContent = "Published cameras";
-      elements.callStatusNote.textContent = !browserSupportsCalls
-        ? "Your browser does not support published cameras here."
-        : state.me && state.me.isGuest
-          ? "Create an account to publish your camera."
-          : "Sign in to use published cameras.";
-    } else if (state.isPublishing) {
-      elements.callStatusTitle.textContent = "Camera published";
-      elements.callStatusNote.textContent = `${state.mediaPublishers.length} published camera${state.mediaPublishers.length === 1 ? "" : "s"} in this room. Drag title bars to move windows.`;
-    } else {
-      elements.callStatusTitle.textContent = "Published cameras";
-      elements.callStatusNote.textContent = roomHasParticipants
-        ? `Click a camera icon in the user list to open any of the ${state.mediaPublishers.length} published camera${state.mediaPublishers.length === 1 ? "" : "s"}.`
-        : "Publish your camera or open someone else's from the user list.";
-    }
-
     elements.callParticipants.innerHTML = "";
 
     const allPublishers = state.mediaPublishers.slice();
@@ -1406,11 +1393,13 @@
     renderTyping();
     renderCallPanel();
     applyPreferences();
+    showRoomPicker();
   }
 
   function showAuthShell() {
     elements.chatShell.classList.add("hidden");
     elements.authShell.classList.remove("hidden");
+    hideRoomPicker();
     setActiveTab("guest");
   }
 
@@ -1440,11 +1429,6 @@
       renderPmInbox();
       renderPmWindow();
       showChatShell();
-
-      const desiredRoom = roomBySlug(state.activeRoom) ? state.activeRoom : (state.rooms[0] && state.rooms[0].slug);
-      if (desiredRoom) {
-        joinRoom(desiredRoom);
-      }
 
       sendActivityPing(true);
     });
@@ -1700,6 +1684,7 @@
     renderCallPanel();
     renderRooms();
     renderMessages();
+    hideRoomPicker();
     state.socket.emit("join room", { roomSlug });
   }
 
@@ -1762,15 +1747,12 @@
     event.preventDefault();
 
     const guestName = elements.guestName.value.trim();
-    const roomSlug = elements.guestRoomSelect.value;
-
     if (guestName.length < 2) {
       showToast("Pick a guest name with at least 2 characters.", "error");
       return;
     }
 
     localStorage.setItem(storageKeys.guestName, guestName);
-    state.activeRoom = roomSlug;
     connectSocket({ guestName });
   }
 
@@ -1778,7 +1760,6 @@
     event.preventDefault();
 
     try {
-      state.activeRoom = elements.loginRoomSelect.value || state.activeRoom;
       const payload = await api("/api/auth/login", {
         method: "POST",
         body: {
@@ -1801,7 +1782,6 @@
     event.preventDefault();
 
     try {
-      state.activeRoom = elements.registerRoomSelect.value || state.activeRoom;
       const payload = await api("/api/auth/register", {
         method: "POST",
         body: {
@@ -2225,6 +2205,14 @@
       const button = event.target.closest("[data-room-slug]");
       if (!button) return;
       joinRoom(button.dataset.roomSlug);
+    });
+    elements.roomPickerList.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-pick-room-slug]");
+      if (!button) {
+        return;
+      }
+
+      joinRoom(button.dataset.pickRoomSlug);
     });
 
     elements.usersList.addEventListener("click", function (event) {

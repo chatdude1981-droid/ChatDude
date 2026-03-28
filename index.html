@@ -60,10 +60,6 @@
               <span>Guest name</span>
               <input id="guest-name" maxlength="20" placeholder="Pick a display name" />
             </label>
-            <label class="field">
-              <span>Start room</span>
-              <select id="guest-room-select"></select>
-            </label>
             <button type="submit">Enter as Guest</button>
           </form>
           <div class="feature-note">
@@ -84,10 +80,6 @@
               <span>Password</span>
               <input id="login-password" type="password" maxlength="72" placeholder="Your password" />
             </label>
-            <label class="field">
-              <span>Join room</span>
-              <select id="login-room-select"></select>
-            </label>
             <button type="submit">Login</button>
           </form>
         </div>
@@ -107,10 +99,6 @@
             <label class="field">
               <span>Password</span>
               <input id="register-password" type="password" maxlength="72" placeholder="8+ characters" />
-            </label>
-            <label class="field">
-              <span>Join room</span>
-              <select id="register-room-select"></select>
             </label>
             <button type="submit">Create Account</button>
           </form>
@@ -161,17 +149,6 @@
 
       <div class="app-grid">
         <section class="workspace">
-          <section id="media-panel" class="media-panel card">
-            <div class="media-panel-header">
-              <div>
-                <span class="eyebrow">Live Cameras</span>
-                <h4 id="call-status-title">Published cameras</h4>
-              </div>
-              <span id="call-status-note" class="subtle-copy">Turn on your camera to publish it to the room.</span>
-            </div>
-            <div id="call-participants" class="call-participants"></div>
-          </section>
-
           <main class="chat-panel card">
             <div class="chat-panel-header">
               <div>
@@ -249,6 +226,21 @@
             </div>
           </section>
         </aside>
+      </div>
+
+      <div id="call-participants" class="call-participants"></div>
+
+      <div id="room-picker-overlay" class="room-picker-overlay hidden">
+        <div class="room-picker card">
+          <div class="room-picker-header">
+            <div>
+              <span class="eyebrow">Choose A Room</span>
+              <h3>Where do you want to jump in?</h3>
+            </div>
+            <p class="subtle-copy">Pick a room before joining the live chat.</p>
+          </div>
+          <div id="room-picker-list" class="room-picker-list"></div>
+        </div>
       </div>
     </section>
   </div>
