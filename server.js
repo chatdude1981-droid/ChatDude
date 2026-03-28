@@ -419,6 +419,18 @@ function canViewerAccessPublisher(viewerSession, publisherSession) {
   return true;
 }
 
+function canInitiatePrivateCall(callerSession, targetSession) {
+  if (!callerSession || !targetSession) {
+    return false;
+  }
+
+  if (callerSession.accountType === "guest" && targetSession.accountType === "registered") {
+    return false;
+  }
+
+  return true;
+}
+
 function getUsersInRoom(roomSlug, viewerSession) {
   return Array.from(onlineUsers.entries())
     .filter(([, session]) => session.roomSlug === roomSlug)
@@ -1100,8 +1112,8 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession) return;
-    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") {
-      socket.emit("error message", "Private calls are currently limited to registered users.");
+    if (!canInitiatePrivateCall(currentSession, targetSession)) {
+      socket.emit("error message", "Guests cannot start private calls with registered users.");
       return;
     }
     if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) {
@@ -1133,9 +1145,6 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession) return;
-    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") {
-      return;
-    }
     if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) {
       return;
     }
@@ -1283,7 +1292,6 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession || !description) return;
-    if (currentSession.accountType !== "registered" || targetSession.accountType !== "registered") return;
     if (sessionBlocksUsername(targetSession, currentSession.username) || sessionBlocksUsername(currentSession, targetSession.username)) return;
     touchSession(currentSession);
 

@@ -289,6 +289,18 @@
     return !user || user.preferences?.allowPrivateCalls !== false;
   }
 
+  function canInitiatePrivateCall(targetUser) {
+    if (!state.me || !targetUser || !targetUser.socketId) {
+      return false;
+    }
+
+    if (state.me.accountType === "guest" && targetUser.accountType === "registered") {
+      return false;
+    }
+
+    return privateCallsEnabledForCurrentUser() && privateCallsEnabledForUser(targetUser);
+  }
+
   function playPmNotification() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) {
@@ -1424,14 +1436,7 @@
     const user = state.users.find(function (entry) {
       return entry.socketId === socketId;
     });
-    const canCall = Boolean(
-      !state.me?.isGuest &&
-      state.me?.canPrivateMessage &&
-      user &&
-      user.socketId &&
-      privateCallsEnabledForCurrentUser() &&
-      privateCallsEnabledForUser(user)
-    );
+    const canCall = canInitiatePrivateCall(user);
     elements.menuCallAudioBtn.disabled = !canCall;
     elements.menuCallVideoBtn.disabled = !canCall;
     elements.menuCallAudioBtn.title = canCall ? `Start a voice call with ${username}` : "Voice calling is unavailable right now";
@@ -1668,8 +1673,8 @@
   }
 
   async function startPmCall(mode) {
-    if (!state.socket || !state.activePmUser || !state.me || !state.me.canPrivateMessage) {
-      showToast("Private calls are available for registered users.", "error");
+    if (!state.socket || !state.activePmUser || !state.me) {
+      showToast("Join the chat before starting a private call.", "error");
       return;
     }
     if (!privateCallsEnabledForCurrentUser()) {
@@ -1682,8 +1687,10 @@
       showToast("That user is not online right now.", "error");
       return;
     }
-    if (!privateCallsEnabledForUser(targetUser)) {
-      showToast("That user is not accepting private calls right now.", "error");
+    if (!canInitiatePrivateCall(targetUser)) {
+      showToast(state.me.isGuest && targetUser.accountType === "registered"
+        ? "Guests cannot start private calls with registered users."
+        : "That user is not accepting private calls right now.", "error");
       return;
     }
 
