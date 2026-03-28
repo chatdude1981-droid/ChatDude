@@ -1409,11 +1409,13 @@
     applyPreferences();
     positionAccountMenu();
     elements.accountMenu.classList.remove("hidden");
+    elements.accountMenu.style.display = "grid";
     elements.accountBadge.setAttribute("aria-expanded", "true");
   }
 
   function closeAccountMenu() {
     elements.accountMenu.classList.add("hidden");
+    elements.accountMenu.style.display = "";
     elements.accountBadge.setAttribute("aria-expanded", "false");
   }
 
@@ -2860,6 +2862,7 @@
     elements.roomForm.addEventListener("submit", handleCreateRoom);
 
     elements.accountBadge.addEventListener("click", function (event) {
+      event.preventDefault();
       event.stopPropagation();
       if (elements.accountMenu.classList.contains("hidden")) {
         openAccountMenu();
@@ -2906,6 +2909,8 @@
       Math.max(12, window.innerWidth - panelWidth - 12)
     );
     const top = Math.min(buttonRect.bottom + 10, Math.max(72, window.innerHeight - 180));
+    elements.accountMenu.style.width = `${panelWidth}px`;
     elements.accountMenu.style.left = `${left}px`;
     elements.accountMenu.style.top = `${top}px`;
+    elements.accountMenu.style.maxHeight = `${Math.max(220, window.innerHeight - top - 12)}px`;
   }
