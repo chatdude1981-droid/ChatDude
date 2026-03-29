@@ -21,9 +21,9 @@
     <section id="auth-shell" class="auth-shell">
       <div class="hero-panel card">
         <div class="hero-copy">
-          <span class="eyebrow">ChatDude</span>
-          <h1>Realtime rooms with guest speed and account-powered upgrades.</h1>
-          <p>
+          <span id="hero-brand" class="eyebrow">ChatDude</span>
+          <h1 id="hero-title">Realtime rooms with guest speed and account-powered upgrades.</h1>
+          <p id="hero-copy-text">
             Jump in as a guest in seconds, or create an account to unlock saved themes,
             private messaging, custom rooms, and a friendlier returning-user experience.
           </p>
@@ -119,7 +119,7 @@
       <header class="topbar card">
         <div class="brand-cluster">
           <div>
-            <span class="eyebrow">ChatDude</span>
+            <span id="topbar-brand" class="eyebrow">ChatDude</span>
           </div>
           <div class="brand-room-row">
             <div class="room-pill" id="active-room-pill">Waiting for room...</div>
@@ -306,11 +306,24 @@
         <input id="allow-private-calls" type="checkbox" checked />
         <span>Allow private voice and video calls</span>
       </label>
+      <label class="field checkbox-field">
+        <input id="friends-only-private-messages" type="checkbox" />
+        <span>Only allow private messages from friends</span>
+      </label>
+      <label class="field checkbox-field">
+        <input id="friends-only-calls" type="checkbox" />
+        <span>Only allow private calls from friends</span>
+      </label>
+      <label class="field checkbox-field">
+        <input id="adult-confirmed-input" type="checkbox" />
+        <span>I confirm I am 18 or older for adult-only rooms</span>
+      </label>
       <div class="field">
         <span>Blocked users</span>
         <div id="blocked-users-list" class="blocked-users-list"></div>
       </div>
       <div class="account-menu-actions">
+        <button id="open-admin-console-btn" class="ghost-button hidden" type="button">Admin console</button>
         <button id="open-room-modal-btn" class="ghost-button hidden" type="button">New Room</button>
         <button id="delete-room-btn" class="ghost-button hidden" type="button">Delete Room</button>
         <button id="account-leave-room-btn" class="ghost-button hidden" type="button">Back to rooms</button>
@@ -380,19 +393,92 @@
         </div>
         <button id="room-cancel-btn" class="icon-button" type="button">Close</button>
       </div>
-      <form id="room-form" class="stack-form">
-        <label class="field">
-          <span>Room name</span>
-          <input id="room-name-input" maxlength="32" placeholder="Late Night Crew" />
-        </label>
-        <label class="field">
-          <span>Description</span>
-          <input id="room-description-input" maxlength="80" placeholder="Why this room exists" />
-        </label>
-        <button type="submit">Create room</button>
-      </form>
+        <form id="room-form" class="stack-form">
+          <label class="field">
+            <span>Room name</span>
+            <input id="room-name-input" maxlength="32" placeholder="Late Night Crew" />
+          </label>
+          <label class="field">
+            <span>Description</span>
+            <input id="room-description-input" maxlength="80" placeholder="Why this room exists" />
+          </label>
+          <label class="field">
+            <span>Topic</span>
+            <input id="room-topic-input" maxlength="120" placeholder="What this room is about right now" />
+          </label>
+          <label class="field checkbox-field">
+            <input id="room-adult-only-input" type="checkbox" />
+            <span>Mark this room 18+ (self-attested age gate)</span>
+          </label>
+          <label id="room-managed-by-site-field" class="field checkbox-field hidden">
+            <input id="room-managed-by-site-input" type="checkbox" />
+            <span>Make this a site-managed room</span>
+          </label>
+          <button type="submit">Create room</button>
+        </form>
+      </div>
     </div>
-  </div>
+
+    <div id="admin-modal-overlay" class="modal-overlay hidden">
+      <div class="modal card admin-modal">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Admin</span>
+            <h3>Site Console</h3>
+          </div>
+          <button id="admin-cancel-btn" class="icon-button" type="button">Close</button>
+        </div>
+        <form id="admin-settings-form" class="stack-form">
+          <label class="field">
+            <span>Site name</span>
+            <input id="admin-site-name-input" maxlength="40" placeholder="ChatDude" />
+          </label>
+          <label class="field">
+            <span>Site tagline</span>
+            <input id="admin-site-tagline-input" maxlength="120" placeholder="Short product line" />
+          </label>
+          <label class="field">
+            <span>Welcome message</span>
+            <input id="admin-welcome-message-input" maxlength="180" placeholder="What new visitors should know" />
+          </label>
+          <label class="field">
+            <span>Hero blurb</span>
+            <textarea id="admin-hero-blurb-input" maxlength="240" placeholder="Describe what the product is for."></textarea>
+          </label>
+          <label class="field checkbox-field">
+            <input id="admin-require-adult-confirmation-input" type="checkbox" checked />
+            <span>Require self-confirmed 18+ status before joining 18+ rooms</span>
+          </label>
+          <label class="field">
+            <span>Site-wide moderators</span>
+            <textarea id="admin-moderators-input" maxlength="240" placeholder="comma,separated,usernames"></textarea>
+          </label>
+          <div class="field">
+            <span>Email setup placeholder</span>
+            <div class="color-row">
+              <input id="admin-email-provider-input" maxlength="40" placeholder="Provider" />
+              <input id="admin-email-from-input" maxlength="120" placeholder="From address" />
+            </div>
+            <input id="admin-email-replyto-input" maxlength="120" placeholder="Reply-to address" />
+          </div>
+          <label class="field checkbox-field">
+            <input id="admin-email-enabled-input" type="checkbox" />
+            <span>Email system configured</span>
+          </label>
+          <label class="field">
+            <span>Email notes</span>
+            <textarea id="admin-email-notes-input" maxlength="180" placeholder="Reminder notes for later email setup"></textarea>
+          </label>
+          <div class="field">
+            <span>Managed rooms</span>
+            <div id="admin-room-list" class="room-list admin-room-list"></div>
+          </div>
+          <div class="account-menu-actions">
+            <button type="submit">Save site settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
   <div id="toast-stack" class="toast-stack"></div>
   <footer class="site-footer">

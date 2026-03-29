@@ -30,6 +30,21 @@
     authInlineTone: "info",
     authInlineMessage: "",
     needsOnboarding: false,
+    siteSettings: {
+      siteName: "ChatDude",
+      siteTagline: "Realtime rooms with guest speed and account-powered upgrades.",
+      welcomeMessage: "Join a room fast, then build out your profile, friends, and private conversations.",
+      heroBlurb: "ChatDude is built for lightweight hosted communities, private groups, and demo-friendly chat products.",
+      requireAdultConfirmationForAdultRooms: true,
+      moderatorUsernames: [],
+      email: {
+        enabled: false,
+        provider: "",
+        fromAddress: "",
+        replyTo: "",
+        notes: ""
+      }
+    },
     mediaPublishers: [],
     localStream: null,
     isPublishing: false,
@@ -86,6 +101,10 @@
     registerUsername: document.getElementById("register-username"),
     registerPassword: document.getElementById("register-password"),
     registerPasswordStrength: document.getElementById("register-password-strength"),
+    heroBrand: document.getElementById("hero-brand"),
+    heroTitle: document.getElementById("hero-title"),
+    heroCopyText: document.getElementById("hero-copy-text"),
+    topbarBrand: document.getElementById("topbar-brand"),
     activeRoomPill: document.getElementById("active-room-pill"),
     leaveRoomBtn: document.getElementById("leave-room-btn"),
     accountBadge: document.getElementById("account-badge"),
@@ -101,6 +120,7 @@
     profileDisplayNameInput: document.getElementById("profile-display-name-input"),
     profileStatusMessageInput: document.getElementById("profile-status-message-input"),
     openRoomModalBtn: document.getElementById("open-room-modal-btn"),
+    openAdminConsoleBtn: document.getElementById("open-admin-console-btn"),
     accountLeaveRoomBtn: document.getElementById("account-leave-room-btn"),
     copyRoomLinkBtn: document.getElementById("copy-room-link-btn"),
     deleteRoomBtn: document.getElementById("delete-room-btn"),
@@ -148,12 +168,34 @@
     roomCancelBtn: document.getElementById("room-cancel-btn"),
     roomNameInput: document.getElementById("room-name-input"),
     roomDescriptionInput: document.getElementById("room-description-input"),
+    roomTopicInput: document.getElementById("room-topic-input"),
+    roomAdultOnlyInput: document.getElementById("room-adult-only-input"),
+    roomManagedBySiteField: document.getElementById("room-managed-by-site-field"),
+    roomManagedBySiteInput: document.getElementById("room-managed-by-site-input"),
+    adminModalOverlay: document.getElementById("admin-modal-overlay"),
+    adminCancelBtn: document.getElementById("admin-cancel-btn"),
+    adminSettingsForm: document.getElementById("admin-settings-form"),
+    adminSiteNameInput: document.getElementById("admin-site-name-input"),
+    adminSiteTaglineInput: document.getElementById("admin-site-tagline-input"),
+    adminWelcomeMessageInput: document.getElementById("admin-welcome-message-input"),
+    adminHeroBlurbInput: document.getElementById("admin-hero-blurb-input"),
+    adminRequireAdultConfirmationInput: document.getElementById("admin-require-adult-confirmation-input"),
+    adminModeratorsInput: document.getElementById("admin-moderators-input"),
+    adminEmailProviderInput: document.getElementById("admin-email-provider-input"),
+    adminEmailFromInput: document.getElementById("admin-email-from-input"),
+    adminEmailReplytoInput: document.getElementById("admin-email-replyto-input"),
+    adminEmailEnabledInput: document.getElementById("admin-email-enabled-input"),
+    adminEmailNotesInput: document.getElementById("admin-email-notes-input"),
+    adminRoomList: document.getElementById("admin-room-list"),
     preferencesForm: document.getElementById("preferences-form"),
     fontSelect: document.getElementById("font-select"),
     accentColorInput: document.getElementById("accent-color-input"),
     backgroundStyleSelect: document.getElementById("background-style-select"),
     allowGuestCameraView: document.getElementById("allow-guest-camera-view"),
     allowPrivateCalls: document.getElementById("allow-private-calls"),
+    friendsOnlyPrivateMessages: document.getElementById("friends-only-private-messages"),
+    friendsOnlyCalls: document.getElementById("friends-only-calls"),
+    adultConfirmedInput: document.getElementById("adult-confirmed-input"),
     blockedUsersList: document.getElementById("blocked-users-list"),
     toastStack: document.getElementById("toast-stack"),
     connectionBanner: document.getElementById("connection-banner"),
@@ -269,6 +311,76 @@
       name: "Guest",
       description: "Fast public-room access with a lighter feature set. Upgrade later if you want more tools."
     };
+  }
+
+  function canAccessAdminConsole() {
+    return Boolean(state.me && (state.me.isSiteOwner || state.me.isSiteModerator));
+  }
+
+  function renderSiteBranding() {
+    const settings = state.siteSettings || {};
+    const siteName = settings.siteName || "ChatDude";
+    elements.heroBrand.textContent = siteName;
+    elements.topbarBrand.textContent = siteName;
+    elements.heroTitle.textContent = settings.siteTagline || "Realtime rooms with guest speed and account-powered upgrades.";
+    elements.heroCopyText.textContent = settings.heroBlurb || "ChatDude is built for lightweight hosted communities, private groups, and demo-friendly chat products.";
+  }
+
+  function renderAdminConsole() {
+    if (!canAccessAdminConsole()) {
+      return;
+    }
+
+    const settings = state.siteSettings || {};
+    elements.adminSiteNameInput.value = settings.siteName || "";
+    elements.adminSiteTaglineInput.value = settings.siteTagline || "";
+    elements.adminWelcomeMessageInput.value = settings.welcomeMessage || "";
+    elements.adminHeroBlurbInput.value = settings.heroBlurb || "";
+    elements.adminRequireAdultConfirmationInput.checked = settings.requireAdultConfirmationForAdultRooms !== false;
+    elements.adminModeratorsInput.value = Array.isArray(settings.moderatorUsernames) ? settings.moderatorUsernames.join(", ") : "";
+    elements.adminEmailProviderInput.value = settings.email?.provider || "";
+    elements.adminEmailFromInput.value = settings.email?.fromAddress || "";
+    elements.adminEmailReplytoInput.value = settings.email?.replyTo || "";
+    elements.adminEmailEnabledInput.checked = Boolean(settings.email?.enabled);
+    elements.adminEmailNotesInput.value = settings.email?.notes || "";
+
+    elements.adminRoomList.innerHTML = "";
+    const managedRooms = state.rooms.filter(function (room) {
+      return room.managedBySite || room.system;
+    });
+
+    if (!managedRooms.length) {
+      elements.adminRoomList.innerHTML = '<div class="empty-state">No site-managed rooms yet.</div>';
+      return;
+    }
+
+    managedRooms.forEach(function (room) {
+      const item = document.createElement("div");
+      item.className = "room-item";
+      item.innerHTML = `
+        <strong>${escapeHtml(room.name)}</strong>
+        <span class="subtle-copy">${escapeHtml(room.description)}</span>
+        <div class="room-meta">
+          <span>${escapeHtml(room.topic || "No topic")}</span>
+          <span>${room.adultOnly ? "18+" : "All ages"}</span>
+        </div>
+      `;
+      elements.adminRoomList.appendChild(item);
+    });
+  }
+
+  function openAdminModal() {
+    if (!canAccessAdminConsole()) {
+      return;
+    }
+
+    renderAdminConsole();
+    closeAccountMenu();
+    openModal(elements.adminModalOverlay);
+  }
+
+  function closeAdminModal() {
+    closeModal(elements.adminModalOverlay);
   }
 
   function getActiveRoomLink() {
@@ -419,6 +531,9 @@
     elements.backgroundStyleSelect.value = preferences.backgroundStyle;
     elements.allowGuestCameraView.checked = preferences.privacy?.allowGuestCameraView !== false;
     elements.allowPrivateCalls.checked = preferences.allowPrivateCalls !== false;
+    elements.friendsOnlyPrivateMessages.checked = Boolean(preferences.friendsOnlyPrivateMessages);
+    elements.friendsOnlyCalls.checked = Boolean(preferences.friendsOnlyCalls);
+    elements.adultConfirmedInput.checked = Boolean(preferences.adultConfirmed);
     elements.messageInput.style.cssText = styleFromPreferences(preferences);
     elements.pmWindowInput.style.cssText = styleFromPreferences(preferences);
     renderBlockedUsers();
@@ -442,7 +557,31 @@
       return false;
     }
 
+    if (state.me.preferences?.friendsOnlyCalls && !targetUser.isFriend) {
+      return false;
+    }
+
+    if (targetUser.preferences?.friendsOnlyCalls && !targetUser.isFriend) {
+      return false;
+    }
+
     return privateCallsEnabledForCurrentUser() && privateCallsEnabledForUser(targetUser);
+  }
+
+  function canStartPmWithUser(targetUser) {
+    if (!state.me || !targetUser || !targetUser.socketId) {
+      return false;
+    }
+
+    if (!state.me.canPrivateMessage) {
+      return false;
+    }
+
+    if (targetUser.preferences?.friendsOnlyPrivateMessages && !targetUser.isFriend) {
+      return false;
+    }
+
+    return true;
   }
 
   function playPmNotification() {
@@ -632,7 +771,9 @@
     elements.profileStatusMessageInput.value = state.me.preferences?.statusMessage || "";
 
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
+    elements.openAdminConsoleBtn.classList.toggle("hidden", !canAccessAdminConsole());
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
+    elements.roomManagedBySiteField.classList.toggle("hidden", !canAccessAdminConsole());
     elements.copyRoomLinkBtn.disabled = !roomBySlug(state.activeRoom);
     elements.joinAudioBtn.disabled = false;
     elements.joinAudioBtn.title = state.isPublishing
@@ -678,7 +819,7 @@
         <span class="subtle-copy">${escapeHtml(room.description)}</span>
         <div class="room-meta">
           <span>${room.onlineCount || 0} online</span>
-          <span>${room.lastMessageAt ? formatTime({ timestamp: room.lastMessageAt }) : "Quiet"}</span>
+          <span>${room.adultOnly ? "18+" : (room.lastMessageAt ? formatTime({ timestamp: room.lastMessageAt }) : "Quiet")}</span>
         </div>
       `;
       elements.roomList.appendChild(roomButton);
@@ -692,7 +833,7 @@
         <span class="subtle-copy">${escapeHtml(room.description)}</span>
         <div class="room-meta">
           <span>${room.onlineCount || 0} online</span>
-          <span>${room.system ? "Default" : "Custom"}</span>
+          <span>${room.adultOnly ? "18+" : (room.system ? "Default" : "Custom")}</span>
         </div>
       `;
       elements.roomPickerList.appendChild(pickerButton);
@@ -716,7 +857,7 @@
       elements.roomPickerCopy.textContent = "This shared room link opened ChatDude with a room preselected.";
     } else {
       elements.roomPickerTitle.textContent = "Where do you want to jump in?";
-      elements.roomPickerCopy.textContent = "Pick a room before joining the live chat.";
+      elements.roomPickerCopy.textContent = state.siteSettings?.welcomeMessage || "Pick a room before joining the live chat.";
     }
 
     elements.deleteRoomBtn.classList.toggle("hidden", !canManageActiveRoom());
@@ -1615,10 +1756,12 @@
 
     state.selectedUser = { socketId, username };
     elements.userMenuHeader.textContent = username;
-    elements.menuPmBtn.disabled = !state.me || !state.me.canPrivateMessage;
     const user = state.users.find(function (entry) {
       return entry.socketId === socketId;
     });
+    const canPm = canStartPmWithUser(user);
+    elements.menuPmBtn.disabled = !canPm;
+    elements.menuPmBtn.title = canPm ? `Start a private message with ${username}` : "Private messaging is unavailable right now";
     const canCall = canInitiatePrivateCall(user);
     elements.menuCallAudioBtn.disabled = !canCall;
     elements.menuCallVideoBtn.disabled = !canCall;
@@ -1628,7 +1771,7 @@
     elements.menuFriendBtn.textContent = user && user.isFriend ? "Remove friend" : "Add friend";
     elements.menuBlockBtn.disabled = !state.me || state.me.isGuest;
     elements.menuBlockBtn.textContent = user && user.isBlocked ? "Unblock user" : "Block user";
-    const showModerationActions = canManageActiveRoom() && user && !user.isGuest;
+    const showModerationActions = Boolean((canManageActiveRoom() || state.me?.isSiteModerator) && user && !user.isGuest);
     elements.menuMuteBtn.classList.toggle("hidden", !showModerationActions);
     elements.menuKickBtn.classList.toggle("hidden", !showModerationActions);
     if (showModerationActions) {
@@ -2048,6 +2191,7 @@
     socket.on("session ready", function (payload) {
       state.currentSocketId = payload.socketId;
       state.me = payload.user;
+      state.siteSettings = payload.siteSettings || state.siteSettings;
       state.needsOnboarding = Boolean(
         state.me &&
         !state.me.isGuest &&
@@ -2056,6 +2200,7 @@
       state.lastActivityPingAt = 0;
       state.rooms = payload.rooms || state.rooms;
       applyPreferences();
+      renderSiteBranding();
       renderAccount();
       renderRooms();
       renderPmInbox();
@@ -2417,6 +2562,8 @@
       setConnectionState("booting");
       const payload = await api("/api/bootstrap");
       state.rooms = payload.rooms || [];
+      state.siteSettings = payload.siteSettings || state.siteSettings;
+      renderSiteBranding();
       if (requestedRoomSlug && state.rooms.some(function (room) { return room.slug === requestedRoomSlug; })) {
         state.activeRoom = requestedRoomSlug;
       }
@@ -2549,6 +2696,9 @@
     event.preventDefault();
     const name = elements.roomNameInput.value.trim();
     const description = elements.roomDescriptionInput.value.trim();
+    const topic = elements.roomTopicInput.value.trim();
+    const adultOnly = elements.roomAdultOnlyInput.checked;
+    const managedBySite = canAccessAdminConsole() && elements.roomManagedBySiteInput.checked;
 
     if (name.length < 3) {
       showToast("Room name must be at least 3 characters.", "error");
@@ -2560,7 +2710,10 @@
         method: "POST",
         body: {
           name,
-          description
+          description,
+          topic,
+          adultOnly,
+          managedBySite
         }
       });
 
@@ -2595,6 +2748,9 @@
             textColor: elements.accentColorInput.value,
             backgroundStyle: elements.backgroundStyleSelect.value,
             allowPrivateCalls: elements.allowPrivateCalls.checked,
+            friendsOnlyPrivateMessages: elements.friendsOnlyPrivateMessages.checked,
+            friendsOnlyCalls: elements.friendsOnlyCalls.checked,
+            adultConfirmed: elements.adultConfirmedInput.checked,
             privacy: {
               allowGuestCameraView: elements.allowGuestCameraView.checked
             }
@@ -2608,6 +2764,44 @@
       closeAccountMenu();
       renderRooms();
       showToast("Profile and settings updated.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function handleSaveAdminSettings(event) {
+    event.preventDefault();
+
+    try {
+      const payload = await api("/api/admin/site-settings", {
+        method: "PATCH",
+        body: {
+          siteSettings: {
+            siteName: elements.adminSiteNameInput.value.trim(),
+            siteTagline: elements.adminSiteTaglineInput.value.trim(),
+            welcomeMessage: elements.adminWelcomeMessageInput.value.trim(),
+            heroBlurb: elements.adminHeroBlurbInput.value.trim(),
+            requireAdultConfirmationForAdultRooms: elements.adminRequireAdultConfirmationInput.checked,
+            moderatorUsernames: elements.adminModeratorsInput.value
+              .split(",")
+              .map(function (value) { return value.trim(); })
+              .filter(Boolean),
+            email: {
+              enabled: elements.adminEmailEnabledInput.checked,
+              provider: elements.adminEmailProviderInput.value.trim(),
+              fromAddress: elements.adminEmailFromInput.value.trim(),
+              replyTo: elements.adminEmailReplytoInput.value.trim(),
+              notes: elements.adminEmailNotesInput.value.trim()
+            }
+          }
+        }
+      });
+
+      state.siteSettings = payload.siteSettings || state.siteSettings;
+      renderSiteBranding();
+      renderAdminConsole();
+      closeAdminModal();
+      showToast("Site settings updated.", "success");
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -3381,15 +3575,24 @@
 
     elements.openRoomModalBtn.addEventListener("click", function () {
       closeAccountMenu();
+      elements.roomForm.reset();
+      elements.roomManagedBySiteInput.checked = canAccessAdminConsole();
       openModal(elements.roomModalOverlay);
       window.setTimeout(function () {
         elements.roomNameInput.focus();
       }, 0);
     });
+    elements.openAdminConsoleBtn.addEventListener("click", function () {
+      openAdminModal();
+    });
     elements.roomCancelBtn.addEventListener("click", function () {
       closeModal(elements.roomModalOverlay);
     });
+    elements.adminCancelBtn.addEventListener("click", function () {
+      closeAdminModal();
+    });
     elements.roomForm.addEventListener("submit", handleCreateRoom);
+    elements.adminSettingsForm.addEventListener("submit", handleSaveAdminSettings);
     elements.copyRoomLinkBtn.addEventListener("click", async function () {
       try {
         await copyText(getActiveRoomLink());
@@ -3426,7 +3629,8 @@
     });
 
     [
-      elements.roomModalOverlay
+      elements.roomModalOverlay,
+      elements.adminModalOverlay
     ].forEach(function (overlay) {
       overlay.addEventListener("click", function (event) {
         if (event.target === overlay) {

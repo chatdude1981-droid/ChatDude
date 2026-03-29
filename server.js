@@ -17,12 +17,21 @@ const PREMIUM_USERNAMES = new Set(
     .map((value) => String(value || "").trim().toLowerCase())
     .filter(Boolean)
 );
+const SITE_OWNER_USERNAMES = new Set(
+  String(process.env.SITE_OWNER_USERNAMES || "")
+    .split(",")
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+);
 const DEFAULT_ROOMS = [
   {
     id: "room-general",
     slug: "general",
     name: "General",
     description: "Main room for everyday conversation.",
+    topic: "Start here, meet people, and get a feel for the community.",
+    adultOnly: false,
+    managedBySite: true,
     createdAt: new Date().toISOString(),
     createdBy: "system",
     system: true
@@ -32,6 +41,9 @@ const DEFAULT_ROOMS = [
     slug: "random",
     name: "Random",
     description: "Casual off-topic chat.",
+    topic: "Memes, side quests, and whatever does not fit anywhere else.",
+    adultOnly: false,
+    managedBySite: true,
     createdAt: new Date().toISOString(),
     createdBy: "system",
     system: true
@@ -41,11 +53,33 @@ const DEFAULT_ROOMS = [
     slug: "gaming",
     name: "Gaming",
     description: "Game nights, clips, and trash talk.",
+    topic: "Talk games, clips, multiplayer plans, and hot takes.",
+    adultOnly: false,
+    managedBySite: true,
     createdAt: new Date().toISOString(),
     createdBy: "system",
     system: true
   }
 ];
+const DEFAULT_SITE_SETTINGS = {
+  siteName: "ChatDude",
+  siteTagline: "Realtime rooms with guest speed and account-powered upgrades.",
+  welcomeMessage: "Join a room fast, then build out your profile, friends, and private conversations.",
+  heroBlurb: "ChatDude is built for lightweight hosted communities, private groups, and demo-friendly chat products.",
+  requireAdultConfirmationForAdultRooms: true,
+  defaultRoomAudienceLabel: "General audience",
+  moderatorUsernames: [],
+  email: {
+    enabled: false,
+    provider: "",
+    fromAddress: "",
+    replyTo: "",
+    notes: "Placeholder only until a real outbound email service is configured."
+  },
+  appearance: {
+    accentLabel: "Aurora"
+  }
+};
 
 const allowedOrigins = process.env.CLIENT_ORIGIN
   ? process.env.CLIENT_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean)
@@ -63,7 +97,8 @@ let store = {
   users: [],
   rooms: [],
   roomMessages: [],
-  privateMessages: []
+  privateMessages: [],
+  siteSettings: { ...DEFAULT_SITE_SETTINGS }
 };
 let persistence;
 const rateLimitBuckets = new Map();
@@ -243,9 +278,12 @@ function sanitizePreferences(preferences = {}) {
       : "aurora",
     statusMessage,
     onboardingCompleted: Boolean(preferences.onboardingCompleted),
+    adultConfirmed: Boolean(preferences.adultConfirmed),
     lastSeenAt: typeof preferences.lastSeenAt === "string" ? preferences.lastSeenAt : null,
     showJoinLeaveMessages: preferences.showJoinLeaveMessages !== false,
     allowPrivateCalls: preferences.allowPrivateCalls !== false,
+    friendsOnlyPrivateMessages: Boolean(preferences.friendsOnlyPrivateMessages),
+    friendsOnlyCalls: Boolean(preferences.friendsOnlyCalls),
     privacy: {
       allowGuestCameraView: privacy.allowGuestCameraView !== false
     }
@@ -277,6 +315,50 @@ function sanitizePresenceStatus(value) {
   return ["online", "busy"].includes(value) ? value : "online";
 }
 
+function sanitizeUsernameList(list = []) {
+  return Array.from(new Set(
+    list
+      .map((value) => normalizeUsername(String(value || "")).toLowerCase())
+      .filter((value) => isValidUsername(value))
+  ));
+}
+
+function sanitizeSiteSettings(settings = {}) {
+  const moderatorUsernames = sanitizeUsernameList(settings.moderatorUsernames || DEFAULT_SITE_SETTINGS.moderatorUsernames);
+  return {
+    siteName: normalizeUsername(String(settings.siteName || DEFAULT_SITE_SETTINGS.siteName)).slice(0, 40) || DEFAULT_SITE_SETTINGS.siteName,
+    siteTagline: normalizeUsername(String(settings.siteTagline || DEFAULT_SITE_SETTINGS.siteTagline)).slice(0, 120) || DEFAULT_SITE_SETTINGS.siteTagline,
+    welcomeMessage: normalizeUsername(String(settings.welcomeMessage || DEFAULT_SITE_SETTINGS.welcomeMessage)).slice(0, 180) || DEFAULT_SITE_SETTINGS.welcomeMessage,
+    heroBlurb: normalizeUsername(String(settings.heroBlurb || DEFAULT_SITE_SETTINGS.heroBlurb)).slice(0, 240) || DEFAULT_SITE_SETTINGS.heroBlurb,
+    requireAdultConfirmationForAdultRooms: settings.requireAdultConfirmationForAdultRooms !== false,
+    defaultRoomAudienceLabel: normalizeUsername(String(settings.defaultRoomAudienceLabel || DEFAULT_SITE_SETTINGS.defaultRoomAudienceLabel)).slice(0, 40) || DEFAULT_SITE_SETTINGS.defaultRoomAudienceLabel,
+    moderatorUsernames,
+    email: {
+      enabled: Boolean(settings.email?.enabled),
+      provider: normalizeUsername(String(settings.email?.provider || "")).slice(0, 40),
+      fromAddress: String(settings.email?.fromAddress || "").trim().slice(0, 120),
+      replyTo: String(settings.email?.replyTo || "").trim().slice(0, 120),
+      notes: normalizeUsername(String(settings.email?.notes || DEFAULT_SITE_SETTINGS.email.notes)).slice(0, 180) || DEFAULT_SITE_SETTINGS.email.notes
+    },
+    appearance: {
+      accentLabel: normalizeUsername(String(settings.appearance?.accentLabel || DEFAULT_SITE_SETTINGS.appearance.accentLabel)).slice(0, 30) || DEFAULT_SITE_SETTINGS.appearance.accentLabel
+    }
+  };
+}
+
+function sanitizeRoomInput(input = {}, existingRoom = null) {
+  const name = normalizeUsername(String(input.name || existingRoom?.name || ""));
+  const description = normalizeUsername(String(input.description || existingRoom?.description || ""));
+  const topic = normalizeUsername(String(input.topic || existingRoom?.topic || "")).slice(0, 120);
+  return {
+    name: name.slice(0, 32),
+    description: description.slice(0, 80) || "Custom room",
+    topic,
+    adultOnly: Boolean(input.adultOnly ?? existingRoom?.adultOnly ?? false),
+    managedBySite: Boolean(input.managedBySite ?? existingRoom?.managedBySite ?? false)
+  };
+}
+
 function getUserPlan(userLike) {
   if (!userLike || userLike.accountType === "guest") {
     return "guest";
@@ -298,6 +380,26 @@ function getFeatureFlags(userLike) {
     hasExtendedPmHistory: plan === "premium",
     hasAdvancedModeration: plan === "premium"
   };
+}
+
+function isSiteOwner(userLike) {
+  return Boolean(
+    userLike &&
+    userLike.accountType !== "guest" &&
+    SITE_OWNER_USERNAMES.has(String(userLike.username || "").toLowerCase())
+  );
+}
+
+function isSiteModerator(userLike) {
+  if (!userLike || userLike.accountType === "guest") {
+    return false;
+  }
+
+  if (isSiteOwner(userLike)) {
+    return true;
+  }
+
+  return sanitizeUsernameList(store.siteSettings?.moderatorUsernames || []).includes(String(userLike.username || "").toLowerCase());
 }
 
 function consumeRateLimit(key, limit, windowMs) {
@@ -341,6 +443,8 @@ function toPublicUser(user) {
     displayName: user.displayName,
     accountType: "registered",
     plan: getUserPlan({ ...user, accountType: "registered" }),
+    isSiteOwner: isSiteOwner({ ...user, accountType: "registered" }),
+    isSiteModerator: isSiteModerator({ ...user, accountType: "registered" }),
     featureFlags,
     preferences: sanitizePreferences(user.preferences || {}),
     blockedUsers: sanitizeBlockedUsers(user.blockedUsers || []),
@@ -357,6 +461,8 @@ function serializeSession(session) {
     accountType: session.accountType,
     isGuest: session.accountType === "guest",
     plan: getUserPlan(session),
+    isSiteOwner: isSiteOwner(session),
+    isSiteModerator: isSiteModerator(session),
     canCustomize: session.accountType === "registered",
     canCreateRooms: featureFlags.canCreateRooms,
     canPrivateMessage: featureFlags.canPrivateMessage,
@@ -380,6 +486,9 @@ function serializeRoom(room) {
     slug: room.slug,
     name: room.name,
     description: room.description,
+    topic: room.topic || "",
+    adultOnly: Boolean(room.adultOnly),
+    managedBySite: Boolean(room.managedBySite),
     createdAt: room.createdAt,
     createdBy: room.createdBy,
     system: Boolean(room.system),
@@ -495,6 +604,15 @@ function canInitiatePrivateCall(callerSession, targetSession) {
   }
 
   if (callerSession.accountType === "guest" && targetSession.accountType === "registered") {
+    return false;
+  }
+
+  const callerPrefs = sanitizePreferences(callerSession.preferences || {});
+  const targetPrefs = sanitizePreferences(targetSession.preferences || {});
+  if (callerPrefs.friendsOnlyCalls && !sessionFriendsUsername(callerSession, targetSession.username)) {
+    return false;
+  }
+  if (targetPrefs.friendsOnlyCalls && !sessionFriendsUsername(targetSession, callerSession.username)) {
     return false;
   }
 
@@ -698,7 +816,8 @@ app.get("/api/bootstrap", (req, res) => {
 
   res.json({
     rooms: store.rooms.map(serializeRoom),
-    currentUser: user ? toPublicUser(user) : null
+    currentUser: user ? toPublicUser(user) : null,
+    siteSettings: sanitizeSiteSettings(store.siteSettings || DEFAULT_SITE_SETTINGS)
   });
 });
 
@@ -789,6 +908,35 @@ function requireAuth(req, res, next) {
 
 app.get("/api/me", requireAuth, (req, res) => {
   res.json({ user: toPublicUser(req.user) });
+});
+
+app.get("/api/admin/site-settings", requireAuth, (req, res) => {
+  if (!isSiteModerator({ ...req.user, accountType: "registered" })) {
+    res.status(403).json({ error: "Admin access is required." });
+    return;
+  }
+
+  res.json({
+    siteSettings: sanitizeSiteSettings(store.siteSettings || DEFAULT_SITE_SETTINGS),
+    rooms: store.rooms.map(serializeRoom)
+  });
+});
+
+app.patch("/api/admin/site-settings", requireAuth, async (req, res) => {
+  if (!isSiteOwner({ ...req.user, accountType: "registered" })) {
+    res.status(403).json({ error: "Only the site owner can update site settings." });
+    return;
+  }
+
+  store.siteSettings = sanitizeSiteSettings({
+    ...(store.siteSettings || DEFAULT_SITE_SETTINGS),
+    ...(req.body.siteSettings || {})
+  });
+  await persistence.updateSiteSettings(store.siteSettings);
+
+  res.json({
+    siteSettings: sanitizeSiteSettings(store.siteSettings)
+  });
 });
 
 app.patch("/api/me/profile", requireAuth, async (req, res) => {
@@ -951,8 +1099,9 @@ app.patch("/api/me/blocks", requireAuth, async (req, res) => {
 });
 
 app.post("/api/rooms", requireAuth, async (req, res) => {
-  const name = normalizeUsername(req.body.name || "");
-  const description = normalizeUsername(req.body.description || "");
+  const roomInput = sanitizeRoomInput(req.body || {});
+  const name = roomInput.name;
+  const description = roomInput.description;
   const slug = slugifyRoomName(name);
 
   if (!consumeRateLimit(`room-create:${req.user.id}`, 8, 10 * 60 * 1000)) {
@@ -978,8 +1127,11 @@ app.post("/api/rooms", requireAuth, async (req, res) => {
   const room = {
     id: crypto.randomUUID(),
     slug,
-    name: name.slice(0, 32),
-    description: description.slice(0, 80) || "Custom room",
+    name,
+    description,
+    topic: roomInput.topic,
+    adultOnly: roomInput.adultOnly,
+    managedBySite: Boolean(roomInput.managedBySite && isSiteModerator({ ...req.user, accountType: "registered" })),
     createdAt: new Date().toISOString(),
     createdBy: req.user.username,
     system: false
@@ -994,6 +1146,32 @@ app.post("/api/rooms", requireAuth, async (req, res) => {
   });
 });
 
+app.patch("/api/admin/rooms/:slug", requireAuth, async (req, res) => {
+  if (!isSiteModerator({ ...req.user, accountType: "registered" })) {
+    res.status(403).json({ error: "Admin access is required." });
+    return;
+  }
+
+  const room = getRoomBySlug(req.params.slug);
+  if (!room) {
+    res.status(404).json({ error: "Room not found." });
+    return;
+  }
+
+  const nextRoom = sanitizeRoomInput(req.body || {}, room);
+  room.name = nextRoom.name;
+  room.description = nextRoom.description;
+  room.topic = nextRoom.topic;
+  room.adultOnly = nextRoom.adultOnly;
+  room.managedBySite = nextRoom.managedBySite;
+  await persistence.updateRoom(room);
+  emitRoomList();
+
+  res.json({
+    room: serializeRoom(room)
+  });
+});
+
 app.delete("/api/rooms/:slug", requireAuth, async (req, res) => {
   const room = getRoomBySlug(req.params.slug);
 
@@ -1002,8 +1180,8 @@ app.delete("/api/rooms/:slug", requireAuth, async (req, res) => {
     return;
   }
 
-  if (!canManageRoom(req.user, room)) {
-    res.status(403).json({ error: "Only the room creator can delete this room." });
+  if (!canManageRoom(req.user, room) && !isSiteModerator({ ...req.user, accountType: "registered" })) {
+    res.status(403).json({ error: "Only the room creator or a site moderator can delete this room." });
     return;
   }
 
@@ -1093,7 +1271,8 @@ io.on("connection", (socket) => {
   socket.emit("session ready", {
     socketId: socket.id,
     user: serializeSession(session),
-    rooms: store.rooms.map(serializeRoom)
+    rooms: store.rooms.map(serializeRoom),
+    siteSettings: sanitizeSiteSettings(store.siteSettings || DEFAULT_SITE_SETTINGS)
   });
 
   socket.on("join room", ({ roomSlug }) => {
@@ -1105,6 +1284,14 @@ io.on("connection", (socket) => {
 
     const currentSession = onlineUsers.get(socket.id);
     if (!currentSession) return;
+    if (
+      room.adultOnly &&
+      sanitizeSiteSettings(store.siteSettings || DEFAULT_SITE_SETTINGS).requireAdultConfirmationForAdultRooms &&
+      sanitizePreferences(currentSession.preferences || {}).adultConfirmed !== true
+    ) {
+      socket.emit("error message", "This room is marked 18+. Confirm your age in account settings before joining.");
+      return;
+    }
     touchSession(currentSession);
     currentSession.socketId = socket.id;
     currentSession.isTyping = false;
@@ -1242,6 +1429,15 @@ io.on("connection", (socket) => {
 
     if (sessionBlocksUsername(recipientSession, currentSession.username) || sessionBlocksUsername(currentSession, recipientSession.username)) {
       socket.emit("error message", "This user is not available for private messages.");
+      return;
+    }
+
+    const recipientPreferences = sanitizePreferences(recipientSession.preferences || {});
+    if (
+      recipientPreferences.friendsOnlyPrivateMessages &&
+      !sessionFriendsUsername(recipientSession, currentSession.username)
+    ) {
+      socket.emit("error message", "This user only accepts private messages from friends.");
       return;
     }
 
@@ -1524,7 +1720,7 @@ io.on("connection", (socket) => {
     if (!currentSession || !currentSession.roomSlug) return;
 
     const room = getRoomBySlug(currentSession.roomSlug);
-    if (!canManageRoom(currentSession, room)) {
+    if (!canManageRoom(currentSession, room) && !isSiteModerator(currentSession)) {
       socket.emit("error message", "You do not manage this room.");
       return;
     }
@@ -1676,6 +1872,10 @@ async function start() {
     maxPrivateMessages: MAX_PRIVATE_MESSAGES
   });
   store = persistence.store;
+  store.siteSettings = sanitizeSiteSettings({
+    ...DEFAULT_SITE_SETTINGS,
+    ...(store.siteSettings || {})
+  });
 
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {

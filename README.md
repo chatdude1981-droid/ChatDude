@@ -31,6 +31,7 @@ It supports fast guest entry, registered accounts, custom rooms, friends, privat
 - draggable PM window
 - friend list and friend room-entry notices
 - block/unblock controls
+- friend-only PM/call privacy options
 - presence states: online, busy, idle
 - saved profile basics: display name and status message
 
@@ -48,6 +49,8 @@ It supports fast guest entry, registered accounts, custom rooms, friends, privat
 - stronger auth validation and password strength checks
 - reconnect/cold-start banner for Render free-tier behavior
 - room link sharing for demo/invite flows
+- site-owner/admin console for branding, site settings, moderators, and managed-room oversight
+- self-attested 18+ room gating for low-cost deployments
 - privacy/terms placeholder pages
 
 ## Stack
@@ -102,6 +105,7 @@ CLIENT_ORIGIN=https://your-github-pages-site.github.io
 AUTH_SECRET=replace-this-with-a-long-random-secret
 DATABASE_URL=postgresql://...
 PREMIUM_USERNAMES=comma,separated,usernames
+SITE_OWNER_USERNAMES=comma,separated,usernames
 PGSSL_DISABLE=false
 ```
 
@@ -111,6 +115,7 @@ Notes:
 - `AUTH_SECRET` should always be set in production.
 - `DATABASE_URL` should point to a hosted Postgres database if you want persistence across deploys.
 - `PREMIUM_USERNAMES` is an admin/development feature gate for monetization readiness before billing exists.
+- `SITE_OWNER_USERNAMES` defines who can access the site-owner console and own global settings.
 - `PGSSL_DISABLE=true` is only for local or non-SSL Postgres.
 
 ## Local Setup
@@ -168,6 +173,12 @@ Current premium-oriented gates are code-ready for:
 - room branding/customization
 - extended PM history
 - advanced moderation
+
+## Safety Notes
+
+- Adult-only rooms currently use a self-attested 18+ confirmation gate stored in user preferences.
+- This is useful for lightweight communities on the current stack, but it is not a strong identity or legal age verification system.
+- Real email verification or stronger age assurance becomes worth adding when you move to a more serious auth/email infrastructure.
 
 The current setup is intentionally informational/admin-gated rather than payment-backed.
 

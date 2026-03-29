@@ -15,7 +15,8 @@ function ensureFileStore(defaultRooms) {
       users: [],
       rooms: defaultRooms,
       roomMessages: [],
-      privateMessages: []
+      privateMessages: [],
+      siteSettings: {}
     };
 
     fs.writeFileSync(STORE_FILE, JSON.stringify(initialStore, null, 2));
@@ -30,6 +31,7 @@ function loadFileStore(defaultRooms) {
   if (!Array.isArray(parsed.rooms)) parsed.rooms = [];
   if (!Array.isArray(parsed.roomMessages)) parsed.roomMessages = [];
   if (!Array.isArray(parsed.privateMessages)) parsed.privateMessages = [];
+  if (!parsed.siteSettings || typeof parsed.siteSettings !== "object") parsed.siteSettings = {};
 
   defaultRooms.forEach((room) => {
     if (!parsed.rooms.some((existing) => existing.slug === room.slug)) {
@@ -71,7 +73,8 @@ function normalizeStore(defaultRooms, store) {
     users: Array.isArray(store.users) ? store.users : [],
     rooms: Array.isArray(store.rooms) ? store.rooms : [],
     roomMessages: Array.isArray(store.roomMessages) ? store.roomMessages : [],
-    privateMessages: Array.isArray(store.privateMessages) ? store.privateMessages : []
+    privateMessages: Array.isArray(store.privateMessages) ? store.privateMessages : [],
+    siteSettings: store.siteSettings && typeof store.siteSettings === "object" ? store.siteSettings : {}
   };
 
   defaultRooms.forEach((room) => {
@@ -106,6 +109,9 @@ async function createPersistence(defaultRooms, options = {}) {
       async createRoom(_room) {
         saveFileStore(store);
       },
+      async updateRoom(_room) {
+        saveFileStore(store);
+      },
       async deleteRoom(_roomSlug) {
         saveFileStore(store);
       },
@@ -116,6 +122,9 @@ async function createPersistence(defaultRooms, options = {}) {
         saveFileStore(store);
       },
       async savePrivateMessage(_message) {
+        saveFileStore(store);
+      },
+      async updateSiteSettings(_siteSettings) {
         saveFileStore(store);
       }
     };
@@ -155,10 +164,28 @@ async function createPersistence(defaultRooms, options = {}) {
         slug TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
+        topic TEXT NOT NULL DEFAULT '',
+        adult_only BOOLEAN NOT NULL DEFAULT FALSE,
+        managed_by_site BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMPTZ NOT NULL,
         created_by TEXT NOT NULL,
         system BOOLEAN NOT NULL DEFAULT FALSE
       );
+    `);
+
+    await query(`
+      ALTER TABLE rooms
+      ADD COLUMN IF NOT EXISTS topic TEXT NOT NULL DEFAULT '';
+    `);
+
+    await query(`
+      ALTER TABLE rooms
+      ADD COLUMN IF NOT EXISTS adult_only BOOLEAN NOT NULL DEFAULT FALSE;
+    `);
+
+    await query(`
+      ALTER TABLE rooms
+      ADD COLUMN IF NOT EXISTS managed_by_site BOOLEAN NOT NULL DEFAULT FALSE;
     `);
 
     await query(`
@@ -214,17 +241,35 @@ async function createPersistence(defaultRooms, options = {}) {
       ALTER TABLE private_messages
       ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
     `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS site_settings (
+        id TEXT PRIMARY KEY,
+        settings JSONB NOT NULL DEFAULT '{}'::jsonb
+      );
+    `);
   }
 
   async function seedDefaultRooms() {
     for (const room of defaultRooms) {
       await query(
         `
-          INSERT INTO rooms (id, slug, name, description, created_at, created_by, system)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO rooms (id, slug, name, description, topic, adult_only, managed_by_site, created_at, created_by, system)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           ON CONFLICT (slug) DO NOTHING
         `,
-        [room.id, room.slug, room.name, room.description, room.createdAt, room.createdBy, room.system]
+        [
+          room.id,
+          room.slug,
+          room.name,
+          room.description,
+          room.topic || "",
+          Boolean(room.adultOnly),
+          Boolean(room.managedBySite),
+          room.createdAt,
+          room.createdBy,
+          room.system
+        ]
       );
     }
   }
@@ -270,11 +315,22 @@ async function createPersistence(defaultRooms, options = {}) {
     for (const room of fileStore.rooms) {
       await query(
         `
-          INSERT INTO rooms (id, slug, name, description, created_at, created_by, system)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO rooms (id, slug, name, description, topic, adult_only, managed_by_site, created_at, created_by, system)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           ON CONFLICT (slug) DO NOTHING
         `,
-        [room.id, room.slug, room.name, room.description, room.createdAt, room.createdBy, room.system]
+        [
+          room.id,
+          room.slug,
+          room.name,
+          room.description,
+          room.topic || "",
+          Boolean(room.adultOnly),
+          Boolean(room.managedBySite),
+          room.createdAt,
+          room.createdBy,
+          room.system
+        ]
       );
     }
 
@@ -330,11 +386,12 @@ async function createPersistence(defaultRooms, options = {}) {
   }
 
   async function loadDatabaseStore() {
-    const [usersResult, roomsResult, roomMessagesResult, privateMessagesResult] = await Promise.all([
+    const [usersResult, roomsResult, roomMessagesResult, privateMessagesResult, siteSettingsResult] = await Promise.all([
       query("SELECT * FROM users ORDER BY created_at ASC"),
       query("SELECT * FROM rooms ORDER BY created_at ASC"),
       query("SELECT * FROM room_messages ORDER BY timestamp ASC"),
-      query("SELECT * FROM private_messages ORDER BY timestamp ASC")
+      query("SELECT * FROM private_messages ORDER BY timestamp ASC"),
+      query("SELECT settings FROM site_settings WHERE id = 'default' LIMIT 1")
     ]);
 
     return normalizeStore(defaultRooms, {
@@ -353,6 +410,9 @@ async function createPersistence(defaultRooms, options = {}) {
         slug: row.slug,
         name: row.name,
         description: row.description,
+        topic: row.topic || "",
+        adultOnly: Boolean(row.adult_only),
+        managedBySite: Boolean(row.managed_by_site),
         createdAt: new Date(row.created_at).toISOString(),
         createdBy: row.created_by,
         system: Boolean(row.system)
@@ -386,7 +446,8 @@ async function createPersistence(defaultRooms, options = {}) {
         toSocketId: row.to_socket_id,
         time: row.time,
         timestamp: new Date(row.timestamp).toISOString()
-      }))
+      })),
+      siteSettings: siteSettingsResult.rows[0] ? fromJson(siteSettingsResult.rows[0].settings, {}) : {}
     });
   }
 
@@ -442,10 +503,35 @@ async function createPersistence(defaultRooms, options = {}) {
     async createRoom(room) {
       await query(
         `
-          INSERT INTO rooms (id, slug, name, description, created_at, created_by, system)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO rooms (id, slug, name, description, topic, adult_only, managed_by_site, created_at, created_by, system)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
-        [room.id, room.slug, room.name, room.description, room.createdAt, room.createdBy, room.system]
+        [
+          room.id,
+          room.slug,
+          room.name,
+          room.description,
+          room.topic || "",
+          Boolean(room.adultOnly),
+          Boolean(room.managedBySite),
+          room.createdAt,
+          room.createdBy,
+          room.system
+        ]
+      );
+    },
+    async updateRoom(room) {
+      await query(
+        `
+          UPDATE rooms
+          SET name = $2,
+              description = $3,
+              topic = $4,
+              adult_only = $5,
+              managed_by_site = $6
+          WHERE slug = $1
+        `,
+        [room.slug, room.name, room.description, room.topic || "", Boolean(room.adultOnly), Boolean(room.managedBySite)]
       );
     },
     async deleteRoom(roomSlug) {
@@ -502,6 +588,16 @@ async function createPersistence(defaultRooms, options = {}) {
         ]
       );
       await trimPrivateMessages(store);
+    },
+    async updateSiteSettings(siteSettings) {
+      await query(
+        `
+          INSERT INTO site_settings (id, settings)
+          VALUES ('default', $1::jsonb)
+          ON CONFLICT (id) DO UPDATE SET settings = EXCLUDED.settings
+        `,
+        [toJson(siteSettings || {})]
+      );
     }
   };
 }
