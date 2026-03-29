@@ -2149,11 +2149,11 @@
     setConnectionState("connected");
   }
 
-  function showAuthShell() {
+  function showAuthShell(tab) {
     elements.chatShell.classList.add("hidden");
     elements.authShell.classList.remove("hidden");
     hideRoomPicker();
-    setActiveTab("guest");
+    setActiveTab(tab || "guest");
     setAuthInlineStatus("");
   }
 
@@ -2833,10 +2833,10 @@
       localStorage.removeItem(storageKeys.guestName);
     }
 
-    showAuthShell();
+    showAuthShell(wasGuest ? "guest" : "login");
 
     if (showMessage !== false) {
-      showToast("You left the chat.", "success");
+      showToast(wasGuest ? "You left the chat." : "You logged out.", "success");
     }
   }
 
