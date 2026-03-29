@@ -1259,6 +1259,20 @@ body.has-split-call .chat-panel {
   justify-content: space-between;
 }
 
+.friend-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.friend-remove-btn {
+  min-width: auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+}
+
 .user-cam-btn {
   width: 28px;
   min-width: 28px;

@@ -307,8 +307,9 @@ function sanitizeFriends(friends = []) {
 }
 
 function sessionFriendsUsername(session, username) {
-  const friends = sanitizeFriends(session?.friends || []);
-  return friends.includes(normalizeUsername(String(username || "")));
+  const target = normalizeUsername(String(username || "")).toLowerCase();
+  const friends = sanitizeFriends(session?.friends || []).map((entry) => entry.toLowerCase());
+  return friends.includes(target);
 }
 
 function sanitizePresenceStatus(value) {
@@ -384,6 +385,25 @@ function getFeatureFlags(userLike) {
   };
 }
 
+function getConfiguredOwnerUsernames() {
+  return sanitizeUsernameList([
+    ...Array.from(SITE_OWNER_USERNAMES),
+    ...(store.siteSettings?.ownerUsernames || [])
+  ]);
+}
+
+function canUserClaimSiteOwner(userLike) {
+  if (!userLike || userLike.accountType === "guest") {
+    return false;
+  }
+
+  if (isSiteOwner(userLike)) {
+    return false;
+  }
+
+  return getConfiguredOwnerUsernames().length === 0;
+}
+
 function isSiteOwner(userLike) {
   const username = String(userLike?.username || "").toLowerCase();
   return Boolean(
@@ -451,7 +471,8 @@ function toPublicUser(user) {
     featureFlags,
     preferences: sanitizePreferences(user.preferences || {}),
     blockedUsers: sanitizeBlockedUsers(user.blockedUsers || []),
-    friends: sanitizeFriends(user.friends || [])
+    friends: sanitizeFriends(user.friends || []),
+    canClaimSiteOwner: canUserClaimSiteOwner({ ...user, accountType: "registered" })
   };
 }
 
@@ -474,7 +495,8 @@ function serializeSession(session) {
     effectivePresenceStatus: getEffectivePresenceStatus(session),
     preferences: sanitizePreferences(session.preferences || {}),
     blockedUsers: sanitizeBlockedUsers(session.blockedUsers || []),
-    friends: sanitizeFriends(session.friends || [])
+    friends: sanitizeFriends(session.friends || []),
+    canClaimSiteOwner: canUserClaimSiteOwner(session)
   };
 }
 
@@ -931,10 +953,7 @@ app.post("/api/admin/claim-owner", requireAuth, async (req, res) => {
     return;
   }
 
-  const existingOwners = sanitizeUsernameList([
-    ...Array.from(SITE_OWNER_USERNAMES),
-    ...(store.siteSettings?.ownerUsernames || [])
-  ]);
+  const existingOwners = getConfiguredOwnerUsernames();
 
   if (existingOwners.length && !existingOwners.includes(String(req.user.username || "").toLowerCase())) {
     res.status(403).json({ error: "A site owner is already configured." });
@@ -992,6 +1011,7 @@ app.patch("/api/me/profile", requireAuth, async (req, res) => {
   req.user.preferences = preferences;
   await persistence.updateUser(req.user);
 
+  const affectedRooms = new Set();
   for (const [socketId, session] of onlineUsers.entries()) {
     if (session.id === req.user.id) {
       const nextSession = {
@@ -1002,26 +1022,48 @@ app.patch("/api/me/profile", requireAuth, async (req, res) => {
       onlineUsers.set(socketId, nextSession);
       io.to(socketId).emit("preferences updated", preferences);
       io.to(socketId).emit("presence updated", serializeSession(nextSession));
+      if (nextSession.roomSlug) {
+        affectedRooms.add(nextSession.roomSlug);
+      }
     }
   }
+
+  affectedRooms.forEach((roomSlug) => {
+    updateUserList(roomSlug);
+    emitMediaState(roomSlug);
+  });
 
   res.json({ user: toPublicUser(req.user) });
 });
 
 app.patch("/api/me/preferences", requireAuth, async (req, res) => {
-  req.user.preferences = sanitizePreferences(req.body.preferences || {});
+  req.user.preferences = sanitizePreferences({
+    ...(req.user.preferences || {}),
+    ...(req.body.preferences || {})
+  });
   await persistence.updateUser(req.user);
 
+  const affectedRooms = new Set();
   for (const [socketId, session] of onlineUsers.entries()) {
     if (session.id === req.user.id) {
-      onlineUsers.set(socketId, {
+      const nextSession = {
         ...session,
         preferences: req.user.preferences,
         blockedUsers: sanitizeBlockedUsers(req.user.blockedUsers || [])
-      });
+      };
+      onlineUsers.set(socketId, nextSession);
       io.to(socketId).emit("preferences updated", sanitizePreferences(req.user.preferences));
+      io.to(socketId).emit("presence updated", serializeSession(nextSession));
+      if (nextSession.roomSlug) {
+        affectedRooms.add(nextSession.roomSlug);
+      }
     }
   }
+
+  affectedRooms.forEach((roomSlug) => {
+    updateUserList(roomSlug);
+    emitMediaState(roomSlug);
+  });
 
   res.json({
     user: toPublicUser(req.user)
@@ -1048,14 +1090,19 @@ app.patch("/api/me/friends", requireAuth, async (req, res) => {
     return;
   }
 
-  const friends = new Set(sanitizeFriends(req.user.friends || []));
+  const friends = sanitizeFriends(req.user.friends || []);
   if (action === "add") {
-    friends.add(username);
+    if (!friends.some((entry) => entry.toLowerCase() === username.toLowerCase())) {
+      friends.push(username);
+    }
   } else {
-    friends.delete(username);
+    const nextFriends = friends.filter((entry) => entry.toLowerCase() !== username.toLowerCase());
+    req.user.friends = nextFriends;
   }
 
-  req.user.friends = Array.from(friends);
+  if (action === "add") {
+    req.user.friends = friends;
+  }
   await persistence.updateUser(req.user);
 
   for (const [socketId, session] of onlineUsers.entries()) {

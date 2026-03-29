@@ -319,6 +319,9 @@
   }
 
   function canClaimSiteOwner() {
+    if (typeof state.me?.canClaimSiteOwner === "boolean") {
+      return state.me.canClaimSiteOwner;
+    }
     const configuredOwners = Array.isArray(state.siteSettings?.ownerUsernames) ? state.siteSettings.ownerUsernames : [];
     return Boolean(
       state.me &&
@@ -727,41 +730,89 @@
         const onlineFriend = state.users.find(function (user) {
           return user.username === username;
         });
+        const friendLabel = onlineFriend?.displayName || username;
         const item = document.createElement("li");
         item.className = "user-item";
         item.innerHTML = `
           <div class="user-row">
             <span class="user-dot is-${escapeHtml(onlineFriend?.effectivePresenceStatus || "offline")}"></span>
             <div class="user-name-trigger-wrap">
-              <div class="user-name-trigger is-self">
-                <span class="user-name-line">
-                  <strong>${escapeHtml(onlineFriend?.displayName || username)}</strong>
-                  ${onlineFriend && !onlineFriend.isGuest ? verifiedBadgeMarkup() : ""}
-                </span>
-                <span class="user-secondary-line">${escapeHtml(
-                  onlineFriend?.preferences?.statusMessage
-                    || (onlineFriend ? "Here now" : "Offline")
-                )}</span>
-              </div>
-              ${onlineFriend?.isPublishing ? `
+              ${onlineFriend ? `
                 <button
                   type="button"
-                  class="user-cam-btn inline"
-                  data-open-media-id="${escapeHtml(onlineFriend.socketId)}"
-                  title="Open camera"
-                  aria-label="Open camera"
+                  class="user-name-trigger"
+                  data-user-trigger="true"
+                  data-socket-id="${escapeHtml(onlineFriend.socketId)}"
+                  data-username="${escapeHtml(onlineFriend.username)}"
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M15 10.5 19.5 7v10L15 13.5"></path>
-                    <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
-                  </svg>
+                  <span class="user-name-line">
+                    <strong>${escapeHtml(friendLabel)}</strong>
+                    ${!onlineFriend.isGuest ? verifiedBadgeMarkup() : ""}
+                  </span>
+                  <span class="user-secondary-line">${escapeHtml(
+                    onlineFriend.preferences?.statusMessage || "Here now"
+                  )}</span>
                 </button>
-              ` : ""}
+              ` : `
+                <div class="user-name-trigger is-self">
+                  <span class="user-name-line">
+                    <strong>${escapeHtml(friendLabel)}</strong>
+                  </span>
+                  <span class="user-secondary-line">Offline</span>
+                </div>
+              `}
+              <div class="friend-actions">
+                <button
+                  type="button"
+                  class="ghost-button friend-remove-btn"
+                  data-remove-friend-username="${escapeHtml(username)}"
+                  title="Remove friend"
+                  aria-label="Remove ${escapeHtml(friendLabel)} from friends"
+                >Remove</button>
+                ${onlineFriend?.isPublishing ? `
+                  <button
+                    type="button"
+                    class="user-cam-btn inline"
+                    data-open-media-id="${escapeHtml(onlineFriend.socketId)}"
+                    title="Open camera"
+                    aria-label="Open camera"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M15 10.5 19.5 7v10L15 13.5"></path>
+                      <rect x="3" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                    </svg>
+                  </button>
+                ` : ""}
+              </div>
             </div>
           </div>
         `;
         elements.friendsList.appendChild(item);
       });
+  }
+
+  async function removeFriendByUsername(username) {
+    if (!username || !state.me || state.me.isGuest) {
+      return;
+    }
+
+    try {
+      const payload = await api("/api/me/friends", {
+        method: "PATCH",
+        body: {
+          username,
+          action: "remove"
+        }
+      });
+
+      state.me = payload.user;
+      renderAccount();
+      renderUsers();
+      renderPmWindow();
+      showToast(`Removed ${username} from friends`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
   }
 
   function renderAccount() {
@@ -1549,7 +1600,7 @@
     const targetUser = getConversationTarget(state.activePmUser.username);
     const canPm = canReplyToPmConversation(state.activePmUser.username);
     const online = Boolean(targetUser && targetUser.socketId);
-    const callDisabled = !canPm || !online || !privateCallsEnabledForCurrentUser() || !privateCallsEnabledForUser(targetUser);
+    const callDisabled = !online || !canInitiatePrivateCall(targetUser);
 
     elements.pmWindowInput.disabled = !canPm || !online;
     elements.pmSendBtn.disabled = !canPm || !online;
@@ -2322,6 +2373,9 @@
       if (!state.me) return;
       state.me.preferences = preferences;
       applyPreferences();
+      renderAccount();
+      renderUsers();
+      renderPmWindow();
       renderMessages();
     });
 
@@ -2773,6 +2827,9 @@
       state.me = payload.user;
       state.needsOnboarding = false;
       applyPreferences();
+      renderAccount();
+      renderUsers();
+      renderPmWindow();
       closeAccountMenu();
       renderRooms();
       showToast("Profile and settings updated.", "success");
@@ -3495,6 +3552,13 @@
     elements.messages.addEventListener("click", userTriggerHandler);
     elements.usersList.addEventListener("click", userTriggerHandler);
     elements.friendsList.addEventListener("click", userTriggerHandler);
+    elements.friendsList.addEventListener("click", function (event) {
+      const removeButton = event.target.closest("[data-remove-friend-username]");
+      if (!removeButton) return;
+      event.preventDefault();
+      event.stopPropagation();
+      removeFriendByUsername(removeButton.dataset.removeFriendUsername);
+    });
 
     document.addEventListener("click", function (event) {
       if (event.target.closest("[data-user-trigger='true']") || event.target.closest("#user-menu")) {
