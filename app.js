@@ -87,6 +87,7 @@
     registerPassword: document.getElementById("register-password"),
     registerPasswordStrength: document.getElementById("register-password-strength"),
     activeRoomPill: document.getElementById("active-room-pill"),
+    leaveRoomBtn: document.getElementById("leave-room-btn"),
     accountBadge: document.getElementById("account-badge"),
     openInboxBtn: document.getElementById("open-inbox-btn"),
     inboxCount: document.getElementById("inbox-count"),
@@ -100,6 +101,7 @@
     profileDisplayNameInput: document.getElementById("profile-display-name-input"),
     profileStatusMessageInput: document.getElementById("profile-status-message-input"),
     openRoomModalBtn: document.getElementById("open-room-modal-btn"),
+    accountLeaveRoomBtn: document.getElementById("account-leave-room-btn"),
     copyRoomLinkBtn: document.getElementById("copy-room-link-btn"),
     deleteRoomBtn: document.getElementById("delete-room-btn"),
     logoutBtn: document.getElementById("logout-btn"),
@@ -125,6 +127,8 @@
     menuCallVideoBtn: document.getElementById("menu-call-video-btn"),
     menuFriendBtn: document.getElementById("menu-friend-btn"),
     menuBlockBtn: document.getElementById("menu-block-btn"),
+    menuMuteBtn: document.getElementById("menu-mute-btn"),
+    menuKickBtn: document.getElementById("menu-kick-btn"),
     pmWindow: document.getElementById("pm-window"),
     pmWindowTitle: document.getElementById("pm-window-title"),
     pmWindowCloseBtn: document.getElementById("pm-window-close-btn"),
@@ -656,6 +660,10 @@
     );
   }
 
+  function isInActiveRoom() {
+    return Boolean(state.socket && state.activeRoom && !state.pendingRoomSelection);
+  }
+
   function renderRooms() {
     elements.roomList.innerHTML = "";
     elements.roomPickerList.innerHTML = "";
@@ -690,10 +698,14 @@
       elements.roomPickerList.appendChild(pickerButton);
     });
 
-    const activeRoom = roomBySlug(state.activeRoom) || state.rooms[0];
+    const activeRoom = roomBySlug(state.activeRoom);
     if (activeRoom) {
       elements.activeRoomPill.textContent = `${activeRoom.name} room`;
+    } else {
+      elements.activeRoomPill.textContent = "Choose a room";
     }
+    elements.leaveRoomBtn.classList.toggle("hidden", !isInActiveRoom());
+    elements.accountLeaveRoomBtn.classList.toggle("hidden", !isInActiveRoom());
 
     if (state.me && !state.me.isGuest && state.needsOnboarding) {
       elements.roomPickerTitle.textContent = "Welcome to ChatDude";
@@ -1616,6 +1628,13 @@
     elements.menuFriendBtn.textContent = user && user.isFriend ? "Remove friend" : "Add friend";
     elements.menuBlockBtn.disabled = !state.me || state.me.isGuest;
     elements.menuBlockBtn.textContent = user && user.isBlocked ? "Unblock user" : "Block user";
+    const showModerationActions = canManageActiveRoom() && user && !user.isGuest;
+    elements.menuMuteBtn.classList.toggle("hidden", !showModerationActions);
+    elements.menuKickBtn.classList.toggle("hidden", !showModerationActions);
+    if (showModerationActions) {
+      elements.menuMuteBtn.textContent = user.isMutedInRoom ? "Unmute in room" : "Mute in room";
+      elements.menuKickBtn.textContent = "Kick from room";
+    }
     elements.userMenu.classList.remove("hidden");
     elements.userMenu.style.display = "grid";
 
@@ -2092,11 +2111,27 @@
       renderMessages();
     });
 
-    socket.on("user list", function (users) {
-      state.users = users;
-      renderUsers();
-      renderPmWindow();
-    });
+      socket.on("user list", function (users) {
+        state.users = users;
+        renderUsers();
+        renderPmWindow();
+      });
+
+      socket.on("room left", function () {
+        state.activeRoom = "";
+        localStorage.removeItem(storageKeys.lastRoom);
+        state.messages = [];
+        state.users = [];
+        state.mediaPublishers = [];
+        state.openMediaIds.clear();
+        state.typingUsers = [];
+        renderMessages();
+        renderUsers();
+        renderCallPanel();
+        renderTyping();
+        renderRooms();
+        showRoomPicker();
+      });
 
     socket.on("typing update", function (typingUsers) {
       state.typingUsers = Array.isArray(typingUsers) ? typingUsers : [];
@@ -2294,9 +2329,9 @@
       }
     });
 
-    socket.on("error message", function (message) {
-      showToast(message, "error");
-    });
+      socket.on("error message", function (message) {
+        showToast(message, "error");
+      });
 
     socket.on("connect_error", function (error) {
       setConnectionState("cold", error.message || "The backend may be waking up. Give it a moment, then retry if needed.");
@@ -2322,6 +2357,34 @@
     renderMessages();
     hideRoomPicker();
     state.socket.emit("join room", { roomSlug });
+  }
+
+  function leaveCurrentRoom() {
+    if (!state.socket || !state.activeRoom) {
+      showRoomPicker();
+      return;
+    }
+
+    if (state.isPublishing) {
+      leaveCall();
+    }
+
+    state.messages = [];
+    state.users = [];
+    state.mediaPublishers = [];
+    state.openMediaIds.clear();
+    state.typingUsers = [];
+    state.activeRoom = "";
+    localStorage.removeItem(storageKeys.lastRoom);
+    state.pendingRoomSelection = true;
+    renderMessages();
+    renderUsers();
+    renderCallPanel();
+    renderTyping();
+    renderRooms();
+    showRoomPicker();
+    closeAccountMenu();
+    state.socket.emit("leave room");
   }
 
   function handleTypingInput() {
@@ -2796,6 +2859,19 @@
     }
   }
 
+  function sendRoomModerationAction(action) {
+    if (!state.socket || !state.selectedUser || !canManageActiveRoom()) {
+      return;
+    }
+
+    state.socket.emit("room moderation action", {
+      action,
+      targetSocketId: state.selectedUser.socketId,
+      targetUsername: state.selectedUser.username
+    });
+    closeUserMenu();
+  }
+
   function toggleLocalMicrophone() {
     if (!state.isPublishing || !state.localStream) {
       return;
@@ -3100,6 +3176,9 @@
     elements.retryConnectionBtn.addEventListener("click", function () {
       retryLiveConnection();
     });
+    elements.leaveRoomBtn.addEventListener("click", function () {
+      leaveCurrentRoom();
+    });
     elements.presenceStatusSelect.addEventListener("change", function () {
       if (!state.socket) {
         return;
@@ -3262,6 +3341,12 @@
     });
     elements.menuFriendBtn.addEventListener("click", toggleFriendUser);
     elements.menuBlockBtn.addEventListener("click", toggleBlockedUser);
+    elements.menuMuteBtn.addEventListener("click", function () {
+      sendRoomModerationAction("toggle-mute");
+    });
+    elements.menuKickBtn.addEventListener("click", function () {
+      sendRoomModerationAction("kick");
+    });
     elements.pmWindowCloseBtn.addEventListener("click", closePmWindow);
     elements.pmWindowForm.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -3312,6 +3397,9 @@
       } catch (_error) {
         showToast("Unable to copy the room link on this device.", "error");
       }
+    });
+    elements.accountLeaveRoomBtn.addEventListener("click", function () {
+      leaveCurrentRoom();
     });
 
     elements.accountBadge.addEventListener("pointerdown", toggleAccountMenu);

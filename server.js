@@ -67,6 +67,7 @@ let store = {
 };
 let persistence;
 const rateLimitBuckets = new Map();
+const roomModeration = new Map();
 
 function createTimestampPayload(date = new Date()) {
   return {
@@ -501,6 +502,7 @@ function canInitiatePrivateCall(callerSession, targetSession) {
 }
 
 function getUsersInRoom(roomSlug, viewerSession) {
+  const roomState = getRoomModerationState(roomSlug);
   return Array.from(onlineUsers.entries())
     .filter(([, session]) => session.roomSlug === roomSlug)
     .map(([socketId, session]) => ({
@@ -512,13 +514,14 @@ function getUsersInRoom(roomSlug, viewerSession) {
       isGuest: session.accountType === "guest",
       preferences: sanitizePreferences(session.preferences || {}),
       presenceStatus: sanitizePresenceStatus(session.presenceStatus),
-      effectivePresenceStatus: getEffectivePresenceStatus(session),
-      isPublishing: Boolean(session.isPublishing),
-      cameraEnabled: Boolean(session.cameraEnabled),
-      canViewCamera: Boolean(session.isPublishing && canViewerAccessPublisher(viewerSession, session)),
-      isBlocked: Boolean(sessionBlocksUsername(viewerSession, session.username)),
-      isFriend: Boolean(sessionFriendsUsername(viewerSession, session.username))
-    }))
+        effectivePresenceStatus: getEffectivePresenceStatus(session),
+        isPublishing: Boolean(session.isPublishing),
+        cameraEnabled: Boolean(session.cameraEnabled),
+        canViewCamera: Boolean(session.isPublishing && canViewerAccessPublisher(viewerSession, session)),
+        isBlocked: Boolean(sessionBlocksUsername(viewerSession, session.username)),
+        isFriend: Boolean(sessionFriendsUsername(viewerSession, session.username)),
+        isMutedInRoom: roomState.mutedUsernames.has(session.username)
+      }))
     .sort((a, b) => a.username.localeCompare(b.username));
 }
 
@@ -577,6 +580,16 @@ function removeRoomMessages(roomSlug) {
 
 function canManageRoom(user, room) {
   return Boolean(user && room && !room.system && room.createdBy === user.username);
+}
+
+function getRoomModerationState(roomSlug) {
+  if (!roomModeration.has(roomSlug)) {
+    roomModeration.set(roomSlug, {
+      mutedUsernames: new Set()
+    });
+  }
+
+  return roomModeration.get(roomSlug);
 }
 
 function canDeleteMessage(session, room, message) {
@@ -1094,6 +1107,7 @@ io.on("connection", (socket) => {
     if (!currentSession) return;
     touchSession(currentSession);
     currentSession.socketId = socket.id;
+    currentSession.isTyping = false;
 
     const previousRoom = currentSession.roomSlug;
     if (previousRoom === room.slug) {
@@ -1132,11 +1146,35 @@ io.on("connection", (socket) => {
     notifyFriendsInRoom(room.slug, currentSession);
   });
 
+  socket.on("leave room", () => {
+    const currentSession = onlineUsers.get(socket.id);
+    if (!currentSession || !currentSession.roomSlug) return;
+
+    const previousRoom = currentSession.roomSlug;
+    currentSession.roomSlug = null;
+    currentSession.isTyping = false;
+    currentSession.isPublishing = false;
+    currentSession.cameraEnabled = false;
+    currentSession.micEnabled = false;
+    onlineUsers.set(socket.id, currentSession);
+    socket.leave(previousRoom);
+    updateUserList(previousRoom);
+    emitMediaState(previousRoom);
+    socket.emit("room left", {
+      previousRoomSlug: previousRoom
+    });
+  });
+
   socket.on("chat message", async ({ message }) => {
     const currentSession = onlineUsers.get(socket.id);
     const trimmed = String(message || "").trim();
 
     if (!currentSession || !currentSession.roomSlug || !trimmed) return;
+    const roomState = getRoomModerationState(currentSession.roomSlug);
+    if (roomState.mutedUsernames.has(currentSession.username)) {
+      socket.emit("error message", "You are muted in this room.");
+      return;
+    }
     if (!consumeRateLimit(`chat:${currentSession.id}:${currentSession.roomSlug}`, 14, 12 * 1000)) {
       socket.emit("error message", "You are sending messages too quickly.");
       return;
@@ -1479,6 +1517,82 @@ io.on("connection", (socket) => {
     }
 
     socket.emit("presence updated", serializeSession(currentSession));
+  });
+
+  socket.on("room moderation action", ({ action, targetSocketId, targetUsername }) => {
+    const currentSession = onlineUsers.get(socket.id);
+    if (!currentSession || !currentSession.roomSlug) return;
+
+    const room = getRoomBySlug(currentSession.roomSlug);
+    if (!canManageRoom(currentSession, room)) {
+      socket.emit("error message", "You do not manage this room.");
+      return;
+    }
+
+    const targetSession = onlineUsers.get(targetSocketId);
+    if (!targetSession || targetSession.roomSlug !== currentSession.roomSlug) {
+      socket.emit("error message", "That user is no longer in the room.");
+      return;
+    }
+
+    if (targetSession.username !== targetUsername || targetSession.username === currentSession.username) {
+      socket.emit("error message", "That moderation action is not allowed.");
+      return;
+    }
+
+    const roomState = getRoomModerationState(currentSession.roomSlug);
+
+    if (action === "toggle-mute") {
+      if (roomState.mutedUsernames.has(targetSession.username)) {
+        roomState.mutedUsernames.delete(targetSession.username);
+        io.to(socket.id).emit("system message", buildMessagePayload({
+          id: crypto.randomUUID(),
+          kind: "system",
+          roomSlug: currentSession.roomSlug,
+          message: `${targetSession.displayName || targetSession.username} was unmuted.`,
+          username: "ChatDude",
+          displayName: "ChatDude",
+          accountType: "system",
+          preferences: sanitizePreferences({}),
+          senderId: "system",
+          ...createTimestampPayload()
+        }, null));
+      } else {
+        roomState.mutedUsernames.add(targetSession.username);
+        io.to(targetSocketId).emit("error message", "A room owner muted you in this room.");
+        io.to(socket.id).emit("system message", buildMessagePayload({
+          id: crypto.randomUUID(),
+          kind: "system",
+          roomSlug: currentSession.roomSlug,
+          message: `${targetSession.displayName || targetSession.username} was muted.`,
+          username: "ChatDude",
+          displayName: "ChatDude",
+          accountType: "system",
+          preferences: sanitizePreferences({}),
+          senderId: "system",
+          ...createTimestampPayload()
+        }, null));
+      }
+      updateUserList(currentSession.roomSlug);
+      return;
+    }
+
+    if (action === "kick") {
+      targetSession.roomSlug = null;
+      targetSession.isTyping = false;
+      targetSession.isPublishing = false;
+      targetSession.cameraEnabled = false;
+      targetSession.micEnabled = false;
+      onlineUsers.set(targetSocketId, targetSession);
+      io.sockets.sockets.get(targetSocketId)?.leave(currentSession.roomSlug);
+      io.to(targetSocketId).emit("error message", `You were removed from ${room.name}.`);
+      io.to(targetSocketId).emit("room left", {
+        previousRoomSlug: currentSession.roomSlug
+      });
+      updateUserList(currentSession.roomSlug);
+      emitMediaState(currentSession.roomSlug);
+      return;
+    }
   });
 
   socket.on("activity ping", () => {

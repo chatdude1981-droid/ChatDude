@@ -460,6 +460,18 @@ body.has-split-call .chat-panel {
   overflow: visible;
 }
 
+.brand-room-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.leave-room-btn {
+  padding: 0.55rem 0.9rem;
+  border-radius: 14px;
+}
+
 .connection-banner {
   margin: -2px 6px 8px;
   padding: 12px 16px;

@@ -121,7 +121,10 @@
           <div>
             <span class="eyebrow">ChatDude</span>
           </div>
-          <div class="room-pill" id="active-room-pill">Waiting for room...</div>
+          <div class="brand-room-row">
+            <div class="room-pill" id="active-room-pill">Waiting for room...</div>
+            <button id="leave-room-btn" class="ghost-button leave-room-btn hidden" type="button">Change room</button>
+          </div>
         </div>
 
         <div class="account-cluster">
@@ -233,6 +236,8 @@
     <button id="menu-call-video-btn" class="menu-action" type="button">Video call</button>
     <button id="menu-friend-btn" class="menu-action" type="button">Add friend</button>
     <button id="menu-block-btn" class="menu-action" type="button">Block user</button>
+    <button id="menu-mute-btn" class="menu-action hidden" type="button">Mute in room</button>
+    <button id="menu-kick-btn" class="menu-action hidden" type="button">Kick from room</button>
   </div>
 
   <div id="account-menu" class="account-menu hidden">
@@ -308,6 +313,7 @@
       <div class="account-menu-actions">
         <button id="open-room-modal-btn" class="ghost-button hidden" type="button">New Room</button>
         <button id="delete-room-btn" class="ghost-button hidden" type="button">Delete Room</button>
+        <button id="account-leave-room-btn" class="ghost-button hidden" type="button">Back to rooms</button>
         <button id="copy-room-link-btn" class="ghost-button" type="button">Copy room link</button>
         <button id="logout-btn" class="ghost-button" type="button">Leave</button>
         <button type="submit">Save settings</button>
