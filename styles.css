@@ -1011,7 +1011,7 @@ body.has-split-call .chat-panel {
 
 .messages {
   display: grid;
-  gap: 8px;
+  gap: 2px;
   align-content: start;
   min-height: 0;
   max-height: none;
@@ -1021,35 +1021,43 @@ body.has-split-call .chat-panel {
 }
 
 .message-item {
-  padding: 11px 12px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  box-shadow: none;
+}
+
+.message-item:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.message-item:nth-child(even) {
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .message-item.chat {
-  background: color-mix(in oklab, var(--bubble) 18%, rgba(255, 255, 255, 0.04));
-  border-left: 4px solid color-mix(in oklab, var(--accent) 72%, white);
+  border-left: 2px solid rgba(255, 255, 255, 0.04);
 }
 
 .message-item.system {
   background: rgba(251, 191, 36, 0.08);
-  border-color: rgba(251, 191, 36, 0.18);
+  border-left: 2px solid rgba(251, 191, 36, 0.28);
 }
 
 .message-item.private {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.18);
+  background: rgba(139, 92, 246, 0.08);
+  border-left: 2px solid rgba(139, 92, 246, 0.24);
 }
 
 .message-bubble {
   display: grid;
-  gap: 6px;
+  gap: 2px;
 }
 
 .message-text-row {
   display: flex;
-  align-items: flex-end;
+  align-items: baseline;
   justify-content: space-between;
   gap: 10px;
 }
@@ -1057,7 +1065,7 @@ body.has-split-call .chat-panel {
 .message-inline-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1071,9 +1079,10 @@ body.has-split-call .chat-panel {
 
 .bubble-time {
   flex: 0 0 auto;
-  align-self: flex-end;
+  align-self: baseline;
   white-space: nowrap;
   opacity: 0.85;
+  padding-left: 10px;
 }
 
 .message-bubble.is-own-inline .message-meta {
