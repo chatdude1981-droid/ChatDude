@@ -325,6 +325,7 @@ function sanitizeUsernameList(list = []) {
 
 function sanitizeSiteSettings(settings = {}) {
   const moderatorUsernames = sanitizeUsernameList(settings.moderatorUsernames || DEFAULT_SITE_SETTINGS.moderatorUsernames);
+  const ownerUsernames = sanitizeUsernameList(settings.ownerUsernames || []);
   return {
     siteName: normalizeUsername(String(settings.siteName || DEFAULT_SITE_SETTINGS.siteName)).slice(0, 40) || DEFAULT_SITE_SETTINGS.siteName,
     siteTagline: normalizeUsername(String(settings.siteTagline || DEFAULT_SITE_SETTINGS.siteTagline)).slice(0, 120) || DEFAULT_SITE_SETTINGS.siteTagline,
@@ -332,6 +333,7 @@ function sanitizeSiteSettings(settings = {}) {
     heroBlurb: normalizeUsername(String(settings.heroBlurb || DEFAULT_SITE_SETTINGS.heroBlurb)).slice(0, 240) || DEFAULT_SITE_SETTINGS.heroBlurb,
     requireAdultConfirmationForAdultRooms: settings.requireAdultConfirmationForAdultRooms !== false,
     defaultRoomAudienceLabel: normalizeUsername(String(settings.defaultRoomAudienceLabel || DEFAULT_SITE_SETTINGS.defaultRoomAudienceLabel)).slice(0, 40) || DEFAULT_SITE_SETTINGS.defaultRoomAudienceLabel,
+    ownerUsernames,
     moderatorUsernames,
     email: {
       enabled: Boolean(settings.email?.enabled),
@@ -383,10 +385,11 @@ function getFeatureFlags(userLike) {
 }
 
 function isSiteOwner(userLike) {
+  const username = String(userLike?.username || "").toLowerCase();
   return Boolean(
     userLike &&
     userLike.accountType !== "guest" &&
-    SITE_OWNER_USERNAMES.has(String(userLike.username || "").toLowerCase())
+    (SITE_OWNER_USERNAMES.has(username) || sanitizeUsernameList(store.siteSettings?.ownerUsernames || []).includes(username))
   );
 }
 
@@ -919,6 +922,37 @@ app.get("/api/admin/site-settings", requireAuth, (req, res) => {
   res.json({
     siteSettings: sanitizeSiteSettings(store.siteSettings || DEFAULT_SITE_SETTINGS),
     rooms: store.rooms.map(serializeRoom)
+  });
+});
+
+app.post("/api/admin/claim-owner", requireAuth, async (req, res) => {
+  if (req.user.accountType !== "registered") {
+    res.status(403).json({ error: "Only registered accounts can become the site owner." });
+    return;
+  }
+
+  const existingOwners = sanitizeUsernameList([
+    ...Array.from(SITE_OWNER_USERNAMES),
+    ...(store.siteSettings?.ownerUsernames || [])
+  ]);
+
+  if (existingOwners.length && !existingOwners.includes(String(req.user.username || "").toLowerCase())) {
+    res.status(403).json({ error: "A site owner is already configured." });
+    return;
+  }
+
+  store.siteSettings = sanitizeSiteSettings({
+    ...(store.siteSettings || DEFAULT_SITE_SETTINGS),
+    ownerUsernames: Array.from(new Set([
+      ...(store.siteSettings?.ownerUsernames || []),
+      req.user.username
+    ]))
+  });
+  await persistence.updateSiteSettings(store.siteSettings);
+
+  res.json({
+    user: toPublicUser(req.user),
+    siteSettings: sanitizeSiteSettings(store.siteSettings)
   });
 });
 

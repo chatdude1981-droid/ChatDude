@@ -120,6 +120,7 @@
     profileDisplayNameInput: document.getElementById("profile-display-name-input"),
     profileStatusMessageInput: document.getElementById("profile-status-message-input"),
     openRoomModalBtn: document.getElementById("open-room-modal-btn"),
+    claimOwnerBtn: document.getElementById("claim-owner-btn"),
     openAdminConsoleBtn: document.getElementById("open-admin-console-btn"),
     accountLeaveRoomBtn: document.getElementById("account-leave-room-btn"),
     copyRoomLinkBtn: document.getElementById("copy-room-link-btn"),
@@ -315,6 +316,16 @@
 
   function canAccessAdminConsole() {
     return Boolean(state.me && (state.me.isSiteOwner || state.me.isSiteModerator));
+  }
+
+  function canClaimSiteOwner() {
+    const configuredOwners = Array.isArray(state.siteSettings?.ownerUsernames) ? state.siteSettings.ownerUsernames : [];
+    return Boolean(
+      state.me &&
+      !state.me.isGuest &&
+      !state.me.isSiteOwner &&
+      configuredOwners.length === 0
+    );
   }
 
   function renderSiteBranding() {
@@ -771,6 +782,7 @@
     elements.profileStatusMessageInput.value = state.me.preferences?.statusMessage || "";
 
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
+    elements.claimOwnerBtn.classList.toggle("hidden", !canClaimSiteOwner());
     elements.openAdminConsoleBtn.classList.toggle("hidden", !canAccessAdminConsole());
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
     elements.roomManagedBySiteField.classList.toggle("hidden", !canAccessAdminConsole());
@@ -2807,6 +2819,22 @@
     }
   }
 
+  async function handleClaimSiteOwner() {
+    try {
+      const payload = await api("/api/admin/claim-owner", {
+        method: "POST"
+      });
+      state.me = payload.user;
+      state.siteSettings = payload.siteSettings || state.siteSettings;
+      renderAccount();
+      renderSiteBranding();
+      closeAccountMenu();
+      showToast("This account is now the site owner.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
   function logout(showMessage) {
     stopTyping();
     const wasGuest = Boolean(state.me && state.me.isGuest);
@@ -3581,6 +3609,9 @@
       window.setTimeout(function () {
         elements.roomNameInput.focus();
       }, 0);
+    });
+    elements.claimOwnerBtn.addEventListener("click", function () {
+      handleClaimSiteOwner();
     });
     elements.openAdminConsoleBtn.addEventListener("click", function () {
       openAdminModal();
