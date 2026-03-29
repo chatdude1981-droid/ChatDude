@@ -1077,6 +1077,59 @@ body.has-split-call .chat-panel {
   min-width: 0;
 }
 
+.rich-message {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rich-message-text {
+  min-width: 0;
+}
+
+.message-link {
+  color: color-mix(in oklab, var(--accent) 78%, white);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.message-embed-stack {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 420px);
+  margin-left: calc(var(--message-embed-offset, 0px));
+}
+
+.message-embed-image {
+  width: 100%;
+  max-width: 420px;
+  max-height: 340px;
+  object-fit: contain;
+  display: block;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.message-embed-video {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.message-embed-video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 .bubble-time {
   flex: 0 0 auto;
   align-self: baseline;
@@ -1096,6 +1149,14 @@ body.has-split-call .chat-panel {
 
 .message-bubble.is-own-inline .bubble-time {
   margin-left: auto;
+}
+
+.message-bubble.is-own-inline .message-embed-stack {
+  --message-embed-offset: 0px;
+}
+
+.pm-thread-bubble .message-embed-stack {
+  width: min(100%, 360px);
 }
 
 .message-role,

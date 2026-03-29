@@ -679,6 +679,161 @@
     return style.join("; ");
   }
 
+  function normalizeLinkedUrl(rawUrl) {
+    const value = String(rawUrl || "").trim();
+    if (!value) {
+      return "";
+    }
+
+    return value.replace(/[)\],.!?]+$/g, "");
+  }
+
+  function extractMessageUrls(message) {
+    return Array.from(String(message || "").matchAll(/https?:\/\/[^\s]+/gi)).map(function (match) {
+      return {
+        raw: match[0],
+        normalized: normalizeLinkedUrl(match[0]),
+        index: match.index || 0
+      };
+    }).filter(function (entry) {
+      return entry.normalized;
+    });
+  }
+
+  function getYoutubeEmbedUrl(urlString) {
+    try {
+      const url = new URL(urlString);
+      const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+      let videoId = "";
+
+      if (host === "youtu.be") {
+        videoId = url.pathname.replace(/\//g, "").trim();
+      } else if (host === "youtube.com" || host === "m.youtube.com") {
+        if (url.pathname === "/watch") {
+          videoId = url.searchParams.get("v") || "";
+        } else if (url.pathname.startsWith("/shorts/")) {
+          videoId = url.pathname.split("/")[2] || "";
+        } else if (url.pathname.startsWith("/embed/")) {
+          videoId = url.pathname.split("/")[2] || "";
+        }
+      }
+
+      if (!/^[a-zA-Z0-9_-]{6,}$/.test(videoId)) {
+        return "";
+      }
+
+      return `https://www.youtube-nocookie.com/embed/${videoId}`;
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function getEmbedsForMessage(message) {
+    const urls = extractMessageUrls(message);
+    const embeds = [];
+
+    urls.forEach(function (entry) {
+      if (/\.(gif|png|jpe?g|webp|bmp|svg)(\?.*)?$/i.test(entry.normalized)) {
+        embeds.push({
+          type: "image",
+          url: entry.normalized
+        });
+        return;
+      }
+
+      const youtubeEmbed = getYoutubeEmbedUrl(entry.normalized);
+      if (youtubeEmbed) {
+        embeds.push({
+          type: "youtube",
+          url: youtubeEmbed,
+          sourceUrl: entry.normalized
+        });
+      }
+    });
+
+    return embeds;
+  }
+
+  function buildLinkedTextFragment(message) {
+    const fragment = document.createDocumentFragment();
+    const text = String(message || "");
+    const urls = extractMessageUrls(text);
+    let cursor = 0;
+
+    if (!urls.length) {
+      fragment.appendChild(document.createTextNode(text));
+      return fragment;
+    }
+
+    urls.forEach(function (entry) {
+      const rawLength = entry.raw.length;
+      if (entry.index > cursor) {
+        fragment.appendChild(document.createTextNode(text.slice(cursor, entry.index)));
+      }
+
+      const link = document.createElement("a");
+      link.href = entry.normalized;
+      link.target = "_blank";
+      link.rel = "noreferrer noopener";
+      link.className = "message-link";
+      link.textContent = entry.normalized;
+      fragment.appendChild(link);
+      cursor = entry.index + rawLength;
+    });
+
+    if (cursor < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+
+    return fragment;
+  }
+
+  function createMessageContentNode(message, preferences) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "rich-message";
+
+    const text = document.createElement("div");
+    text.className = "message-text rich-message-text";
+    text.style.cssText = styleFromPreferences(preferences);
+    text.appendChild(buildLinkedTextFragment(message));
+    wrapper.appendChild(text);
+
+    const embeds = getEmbedsForMessage(message);
+    if (embeds.length) {
+      const embedStack = document.createElement("div");
+      embedStack.className = "message-embed-stack";
+
+      embeds.forEach(function (embed) {
+        if (embed.type === "image") {
+          const image = document.createElement("img");
+          image.className = "message-embed-image";
+          image.src = embed.url;
+          image.alt = "Shared image";
+          image.loading = "lazy";
+          embedStack.appendChild(image);
+          return;
+        }
+
+        if (embed.type === "youtube") {
+          const frameWrap = document.createElement("div");
+          frameWrap.className = "message-embed-video";
+          const iframe = document.createElement("iframe");
+          iframe.src = embed.url;
+          iframe.title = "YouTube video preview";
+          iframe.loading = "lazy";
+          iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+          iframe.allowFullscreen = true;
+          frameWrap.appendChild(iframe);
+          embedStack.appendChild(frameWrap);
+        }
+      });
+
+      wrapper.appendChild(embedStack);
+    }
+
+    return wrapper;
+  }
+
   function renderBlockedUsers() {
     const blockedUsers = (state.me && state.me.blockedUsers) || [];
     elements.blockedUsersList.innerHTML = "";
@@ -1188,9 +1343,8 @@
         const textRow = document.createElement("div");
         textRow.className = "message-text-row";
 
-        const text = document.createElement("div");
-        text.className = "message-text";
-        text.textContent = message.message;
+        const content = createMessageContentNode(message.message, message.preferences);
+        const text = content.querySelector(".rich-message-text");
         textRow.appendChild(text);
 
         const time = document.createElement("span");
@@ -1199,6 +1353,9 @@
         textRow.appendChild(time);
 
         body.appendChild(textRow);
+        if (content.querySelector(".message-embed-stack")) {
+          body.appendChild(content.querySelector(".message-embed-stack"));
+        }
         item.appendChild(body);
         elements.messages.appendChild(item);
         return;
@@ -1233,10 +1390,8 @@
         const body = document.createElement("div");
         body.className = "message-bubble is-own-inline";
 
-        const text = document.createElement("div");
-        text.className = "message-text";
-        text.textContent = message.message;
-        text.style.cssText = styleFromPreferences(message.preferences);
+        const content = createMessageContentNode(message.message, message.preferences);
+        const text = content.querySelector(".rich-message-text");
 
         const bubbleTime = document.createElement("span");
         bubbleTime.className = "time-label bubble-time";
@@ -1248,6 +1403,9 @@
         inlineRow.appendChild(text);
         inlineRow.appendChild(bubbleTime);
         body.appendChild(inlineRow);
+        if (content.querySelector(".message-embed-stack")) {
+          body.appendChild(content.querySelector(".message-embed-stack"));
+        }
 
         item.appendChild(body);
         elements.messages.appendChild(item);
@@ -1510,15 +1668,21 @@
         getConversationUsername(entry) === state.activePmUser.username
       );
       item.className = `pm-thread-item${outgoing ? " is-outgoing" : ""}`;
-      item.innerHTML = `
-        <div class="pm-thread-bubble">
-          <div class="pm-entry-header">
-            <strong style="${escapeHtml(styleFromPreferences(entry.preferences))}">${escapeHtml(outgoing ? "You" : getConversationLabel(entry))}</strong>
-            <span class="pm-meta">${escapeHtml(formatTime(entry))}</span>
-          </div>
-          <div class="message-text" style="${escapeHtml(styleFromPreferences(entry.preferences))}">${escapeHtml(entry.message)}</div>
-        </div>
-      `;
+      const bubble = document.createElement("div");
+      bubble.className = "pm-thread-bubble";
+      const header = document.createElement("div");
+      header.className = "pm-entry-header";
+      const author = document.createElement("strong");
+      author.style.cssText = styleFromPreferences(entry.preferences);
+      author.textContent = outgoing ? "You" : getConversationLabel(entry);
+      const time = document.createElement("span");
+      time.className = "pm-meta";
+      time.textContent = formatTime(entry);
+      header.appendChild(author);
+      header.appendChild(time);
+      bubble.appendChild(header);
+      bubble.appendChild(createMessageContentNode(entry.message, entry.preferences));
+      item.appendChild(bubble);
       elements.pmThread.appendChild(item);
     });
 
