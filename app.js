@@ -7,6 +7,7 @@
     guestName: "chatdude:guest-name",
     pmFeed: "chatdude:pm-feed"
   };
+  const requestedRoomSlug = new URLSearchParams(window.location.search).get("room") || "";
 
   const state = {
     token: localStorage.getItem(storageKeys.token) || "",
@@ -25,6 +26,10 @@
     typingTimer: null,
     isTyping: false,
     accountMenuOpen: false,
+    connectionState: "booting",
+    authInlineTone: "info",
+    authInlineMessage: "",
+    needsOnboarding: false,
     mediaPublishers: [],
     localStream: null,
     isPublishing: false,
@@ -70,6 +75,7 @@
     authShell: document.getElementById("auth-shell"),
     chatShell: document.getElementById("chat-shell"),
     authTabs: document.getElementById("auth-tabs"),
+    authInlineStatus: document.getElementById("auth-inline-status"),
     guestForm: document.getElementById("guest-form"),
     loginForm: document.getElementById("login-form"),
     registerForm: document.getElementById("register-form"),
@@ -79,6 +85,7 @@
     registerDisplayName: document.getElementById("register-display-name"),
     registerUsername: document.getElementById("register-username"),
     registerPassword: document.getElementById("register-password"),
+    registerPasswordStrength: document.getElementById("register-password-strength"),
     activeRoomPill: document.getElementById("active-room-pill"),
     accountBadge: document.getElementById("account-badge"),
     openInboxBtn: document.getElementById("open-inbox-btn"),
@@ -88,7 +95,12 @@
     accountMenu: document.getElementById("account-menu"),
     accountMenuTitle: document.getElementById("account-menu-title"),
     accountMenuCloseBtn: document.getElementById("account-menu-close-btn"),
+    planName: document.getElementById("plan-name"),
+    planDescription: document.getElementById("plan-description"),
+    profileDisplayNameInput: document.getElementById("profile-display-name-input"),
+    profileStatusMessageInput: document.getElementById("profile-status-message-input"),
     openRoomModalBtn: document.getElementById("open-room-modal-btn"),
+    copyRoomLinkBtn: document.getElementById("copy-room-link-btn"),
     deleteRoomBtn: document.getElementById("delete-room-btn"),
     logoutBtn: document.getElementById("logout-btn"),
     guestUpgradeCard: document.getElementById("guest-upgrade-card"),
@@ -96,6 +108,8 @@
     callParticipants: document.getElementById("call-participants"),
     roomPickerOverlay: document.getElementById("room-picker-overlay"),
     roomPickerList: document.getElementById("room-picker-list"),
+    roomPickerTitle: document.getElementById("room-picker-title"),
+    roomPickerCopy: document.getElementById("room-picker-copy"),
     joinAudioBtn: document.getElementById("join-audio-btn"),
     messages: document.getElementById("messages"),
     messageForm: document.getElementById("message-form"),
@@ -137,7 +151,11 @@
     allowGuestCameraView: document.getElementById("allow-guest-camera-view"),
     allowPrivateCalls: document.getElementById("allow-private-calls"),
     blockedUsersList: document.getElementById("blocked-users-list"),
-    toastStack: document.getElementById("toast-stack")
+    toastStack: document.getElementById("toast-stack"),
+    connectionBanner: document.getElementById("connection-banner"),
+    connectionBannerTitle: document.getElementById("connection-banner-title"),
+    connectionBannerText: document.getElementById("connection-banner-text"),
+    retryConnectionBtn: document.getElementById("retry-connection-btn")
   };
 
   if (elements.pmInboxPopover && elements.pmInboxPopover.parentElement !== document.body) {
@@ -218,6 +236,123 @@
     window.setTimeout(function () {
       toast.remove();
     }, 3400);
+  }
+
+  function setAuthInlineStatus(message, tone) {
+    state.authInlineMessage = message || "";
+    state.authInlineTone = tone || "info";
+    elements.authInlineStatus.textContent = state.authInlineMessage;
+    elements.authInlineStatus.className = `inline-status${state.authInlineMessage ? ` ${state.authInlineTone}` : " hidden"}`;
+  }
+
+  function getPlanPresentation(user) {
+    const plan = user?.plan || "guest";
+    if (plan === "premium") {
+      return {
+        name: "Premium",
+        description: "Advanced moderation, deeper PM history, and premium room controls are unlocked."
+      };
+    }
+
+    if (plan === "free_registered") {
+      return {
+        name: "Free Registered",
+        description: "Saved identity, direct messages, friends, rooms, and profile customization are active."
+      };
+    }
+
+    return {
+      name: "Guest",
+      description: "Fast public-room access with a lighter feature set. Upgrade later if you want more tools."
+    };
+  }
+
+  function getActiveRoomLink() {
+    const room = roomBySlug(state.activeRoom);
+    if (!room) {
+      return window.location.href;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("room", room.slug);
+    return url.toString();
+  }
+
+  async function copyText(value) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+
+    const input = document.createElement("textarea");
+    input.value = value;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  }
+
+  function setConnectionState(nextState, detail) {
+    state.connectionState = nextState;
+    const isVisible = ["booting", "connecting", "reconnecting", "cold", "offline", "error"].includes(nextState);
+    elements.connectionBanner.classList.toggle("hidden", !isVisible);
+
+    if (!isVisible) {
+      return;
+    }
+
+    const titles = {
+      booting: "Starting up",
+      connecting: "Connecting",
+      reconnecting: "Reconnecting",
+      cold: "Waking server",
+      offline: "Disconnected",
+      error: "Connection issue"
+    };
+    const messages = {
+      booting: "Checking your session and loading available rooms.",
+      connecting: "Joining live chat now.",
+      reconnecting: "Trying to restore your live session after a disconnect.",
+      cold: "Render may be cold-starting the backend. This can take a little longer on free hosting.",
+      offline: "You are offline from live chat right now. Retry when you are ready.",
+      error: detail || "ChatDude could not reach the live backend yet."
+    };
+
+    elements.connectionBannerTitle.textContent = titles[nextState] || "Connecting";
+    elements.connectionBannerText.textContent = detail || messages[nextState] || "Connecting to ChatDude.";
+  }
+
+  function formatLastSeen(value) {
+    if (!value) {
+      return "Offline";
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return "Offline";
+    }
+
+    const minutesAgo = Math.round((Date.now() - parsed.getTime()) / 60000);
+    if (minutesAgo <= 1) return "Last seen just now";
+    if (minutesAgo < 60) return `Last seen ${minutesAgo}m ago`;
+    const hoursAgo = Math.round(minutesAgo / 60);
+    if (hoursAgo < 24) return `Last seen ${hoursAgo}h ago`;
+    return `Last seen ${parsed.toLocaleDateString()}`;
+  }
+
+  function passwordStrengthLabel(value) {
+    const password = String(value || "");
+    let score = 0;
+    if (password.length >= 8) score += 1;
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
+    if (/\d/.test(password)) score += 1;
+    if (/[^a-zA-Z0-9]/.test(password)) score += 1;
+
+    if (!password) return { label: "Use 8+ characters with a stronger mix of letters, numbers, and symbols.", tone: "muted" };
+    if (score <= 1) return { label: "Weak password. Add more variety before creating the account.", tone: "error" };
+    if (score === 2) return { label: "Okay start, but add another character type for a stronger password.", tone: "warn" };
+    if (score === 3) return { label: "Strong enough for launch.", tone: "success" };
+    return { label: "Strong password.", tone: "success" };
   }
 
   async function api(path, options) {
@@ -449,7 +584,10 @@
                   <strong>${escapeHtml(onlineFriend?.displayName || username)}</strong>
                   ${onlineFriend && !onlineFriend.isGuest ? verifiedBadgeMarkup() : ""}
                 </span>
-                <span class="user-secondary-line">${escapeHtml(onlineFriend ? "Here now" : "Offline")}</span>
+                <span class="user-secondary-line">${escapeHtml(
+                  onlineFriend?.preferences?.statusMessage
+                    || (onlineFriend ? "Here now" : "Offline")
+                )}</span>
               </div>
               ${onlineFriend?.isPublishing ? `
                 <button
@@ -476,6 +614,7 @@
     if (!state.me) return;
 
     const roleLabel = state.me.isGuest ? "" : verifiedBadgeMarkup();
+    const planPresentation = getPlanPresentation(state.me);
     elements.accountBadge.innerHTML = `
       <span class="account-badge-row">
         <strong>${escapeHtml(state.me.displayName || state.me.username)}</strong>
@@ -483,9 +622,14 @@
       </span>
     `;
     elements.accountMenuTitle.textContent = state.me.displayName || state.me.username;
+    elements.planName.textContent = planPresentation.name;
+    elements.planDescription.textContent = planPresentation.description;
+    elements.profileDisplayNameInput.value = state.me.displayName || state.me.username || "";
+    elements.profileStatusMessageInput.value = state.me.preferences?.statusMessage || "";
 
     elements.openRoomModalBtn.classList.toggle("hidden", !state.me.canCreateRooms);
     elements.guestUpgradeCard.classList.toggle("hidden", !state.me.isGuest);
+    elements.copyRoomLinkBtn.disabled = !roomBySlug(state.activeRoom);
     elements.joinAudioBtn.disabled = false;
     elements.joinAudioBtn.title = state.isPublishing
       ? "Stop publishing your camera"
@@ -549,6 +693,18 @@
     const activeRoom = roomBySlug(state.activeRoom) || state.rooms[0];
     if (activeRoom) {
       elements.activeRoomPill.textContent = `${activeRoom.name} room`;
+    }
+
+    if (state.me && !state.me.isGuest && state.needsOnboarding) {
+      elements.roomPickerTitle.textContent = "Welcome to ChatDude";
+      elements.roomPickerCopy.textContent = "Pick a room to get started, then open your account menu to finish your profile and settings.";
+    } else if (requestedRoomSlug && state.rooms.some(function (room) { return room.slug === requestedRoomSlug; })) {
+      const requestedRoom = state.rooms.find(function (room) { return room.slug === requestedRoomSlug; });
+      elements.roomPickerTitle.textContent = `Jump into ${requestedRoom.name}`;
+      elements.roomPickerCopy.textContent = "This shared room link opened ChatDude with a room preselected.";
+    } else {
+      elements.roomPickerTitle.textContent = "Where do you want to jump in?";
+      elements.roomPickerCopy.textContent = "Pick a room before joining the live chat.";
     }
 
     elements.deleteRoomBtn.classList.toggle("hidden", !canManageActiveRoom());
@@ -911,6 +1067,7 @@
                   <span class="user-badge-text">You</span>
                   ${user.isGuest ? "" : verifiedBadgeMarkup()}
                 </span>
+                <span class="user-secondary-line">${escapeHtml(user.preferences?.statusMessage || "Available in this room")}</span>
               </div>
               ${user.isPublishing ? `
                 <button
@@ -940,6 +1097,7 @@
                   <strong>${escapeHtml(user.displayName || user.username)}</strong>
                   ${user.isGuest ? "" : verifiedBadgeMarkup()}
                 </span>
+                <span class="user-secondary-line">${escapeHtml(user.preferences?.statusMessage || "Available in this room")}</span>
               </button>
               ${user.isPublishing ? `
                 <button
@@ -1473,6 +1631,20 @@
     elements.userMenu.style.display = "";
   }
 
+  function positionAccountMenu() {
+    const buttonRect = elements.accountBadge.getBoundingClientRect();
+    const panelWidth = Math.min(360, window.innerWidth - 24);
+    const left = Math.min(
+      Math.max(12, buttonRect.right - panelWidth),
+      Math.max(12, window.innerWidth - panelWidth - 12)
+    );
+    const top = Math.min(buttonRect.bottom + 10, Math.max(72, window.innerHeight - 180));
+    elements.accountMenu.style.width = `${panelWidth}px`;
+    elements.accountMenu.style.left = `${left}px`;
+    elements.accountMenu.style.top = `${top}px`;
+    elements.accountMenu.style.maxHeight = `${Math.max(220, window.innerHeight - top - 12)}px`;
+  }
+
   function openAccountMenu() {
     if (!state.me) {
       return;
@@ -1812,6 +1984,7 @@
     renderCallPanel();
     applyPreferences();
     showRoomPicker();
+    setConnectionState("connected");
   }
 
   function showAuthShell() {
@@ -1819,6 +1992,22 @@
     elements.authShell.classList.remove("hidden");
     hideRoomPicker();
     setActiveTab("guest");
+    setAuthInlineStatus("");
+  }
+
+  function retryLiveConnection() {
+    if (state.token) {
+      connectSocket({ token: state.token });
+      return;
+    }
+
+    const savedGuestName = (localStorage.getItem(storageKeys.guestName) || "").trim();
+    if (savedGuestName) {
+      connectSocket({ guestName: savedGuestName });
+      return;
+    }
+
+    bootstrap();
   }
 
   function connectSocket(authPayload) {
@@ -1835,10 +2024,16 @@
     });
 
     state.socket = socket;
+    setConnectionState(state.me ? "connecting" : "cold");
 
     socket.on("session ready", function (payload) {
       state.currentSocketId = payload.socketId;
       state.me = payload.user;
+      state.needsOnboarding = Boolean(
+        state.me &&
+        !state.me.isGuest &&
+        state.me.preferences?.onboardingCompleted !== true
+      );
       state.lastActivityPingAt = 0;
       state.rooms = payload.rooms || state.rooms;
       applyPreferences();
@@ -1849,6 +2044,17 @@
       showChatShell();
 
       sendActivityPing(true);
+    });
+
+    socket.on("connect", function () {
+      setConnectionState("connected");
+    });
+
+    socket.on("disconnect", function (reason) {
+      if (reason === "io client disconnect") {
+        return;
+      }
+      setConnectionState("offline", "Your live connection dropped. ChatDude will try to reconnect.");
     });
 
     socket.on("room list", function (rooms) {
@@ -2093,9 +2299,8 @@
     });
 
     socket.on("connect_error", function (error) {
-      if (state.token) {
-        logout(false);
-      } else {
+      setConnectionState("cold", error.message || "The backend may be waking up. Give it a moment, then retry if needed.");
+      if (!state.token) {
         showAuthShell();
       }
       showToast(error.message || "Unable to connect right now.", "error");
@@ -2146,16 +2351,26 @@
 
   async function bootstrap() {
     try {
+      setConnectionState("booting");
       const payload = await api("/api/bootstrap");
       state.rooms = payload.rooms || [];
+      if (requestedRoomSlug && state.rooms.some(function (room) { return room.slug === requestedRoomSlug; })) {
+        state.activeRoom = requestedRoomSlug;
+      }
 
       if (state.token && payload.currentUser) {
         state.me = payload.currentUser;
+        state.needsOnboarding = Boolean(
+          state.me &&
+          !state.me.isGuest &&
+          state.me.preferences?.onboardingCompleted !== true
+        );
         connectSocket({ token: state.token });
       } else if (state.token && !payload.currentUser) {
         logout(false);
       }
     } catch (error) {
+      setConnectionState("error", error.message);
       showToast(error.message, "error");
     }
 
@@ -2179,68 +2394,110 @@
 
     const guestName = elements.guestName.value.trim();
     if (guestName.length < 2) {
+      setAuthInlineStatus("Pick a guest name with at least 2 characters.", "error");
       showToast("Pick a guest name with at least 2 characters.", "error");
       return;
     }
 
+    setAuthInlineStatus("Joining as guest...", "info");
     localStorage.setItem(storageKeys.guestName, guestName);
     connectSocket({ guestName });
   }
 
   async function handleLogin(event) {
     event.preventDefault();
+    const username = elements.loginUsername.value.trim();
+    const password = elements.loginPassword.value;
+
+    if (!username || !password) {
+      setAuthInlineStatus("Enter both your username and password.", "error");
+      return;
+    }
 
     try {
+      setAuthInlineStatus("Signing you in...", "info");
       const payload = await api("/api/auth/login", {
         method: "POST",
         body: {
-          username: elements.loginUsername.value.trim(),
-          password: elements.loginPassword.value
+          username,
+          password
         }
       });
 
-      state.token = payload.token;
-      localStorage.setItem(storageKeys.token, payload.token);
-      state.me = payload.user;
-      showToast("Welcome back.", "success");
-      connectSocket({ token: state.token });
-    } catch (error) {
-      showToast(error.message, "error");
+        state.token = payload.token;
+        localStorage.setItem(storageKeys.token, payload.token);
+        state.me = payload.user;
+        state.needsOnboarding = Boolean(
+          state.me &&
+          !state.me.isGuest &&
+          state.me.preferences?.onboardingCompleted !== true
+        );
+        setAuthInlineStatus("");
+        showToast("Welcome back.", "success");
+        connectSocket({ token: state.token });
+      } catch (error) {
+        setAuthInlineStatus(error.message, "error");
+        showToast(error.message, "error");
+      }
     }
-  }
 
   async function handleRegister(event) {
     event.preventDefault();
+    const displayName = elements.registerDisplayName.value.trim();
+    const username = elements.registerUsername.value.trim();
+    const password = elements.registerPassword.value;
+    const strength = passwordStrengthLabel(password);
+
+    if (!displayName || !username || !password) {
+      setAuthInlineStatus("Complete display name, username, and password to create the account.", "error");
+      return;
+    }
+
+    if (strength.tone === "error") {
+      setAuthInlineStatus("Choose a stronger password before creating the account.", "error");
+      return;
+    }
 
     try {
+      setAuthInlineStatus("Creating your account...", "info");
       const payload = await api("/api/auth/register", {
         method: "POST",
         body: {
-          displayName: elements.registerDisplayName.value.trim(),
-          username: elements.registerUsername.value.trim(),
-          password: elements.registerPassword.value
+          displayName,
+          username,
+          password
         }
       });
 
-      state.token = payload.token;
-      localStorage.setItem(storageKeys.token, payload.token);
-      state.me = payload.user;
-      showToast("Account created. You are in.", "success");
-      connectSocket({ token: state.token });
-    } catch (error) {
-      showToast(error.message, "error");
+        state.token = payload.token;
+        localStorage.setItem(storageKeys.token, payload.token);
+        state.me = payload.user;
+        state.needsOnboarding = true;
+        setAuthInlineStatus("");
+        showToast("Account created. You are in.", "success");
+        connectSocket({ token: state.token });
+      } catch (error) {
+        setAuthInlineStatus(error.message, "error");
+        showToast(error.message, "error");
+      }
     }
-  }
 
   async function handleCreateRoom(event) {
     event.preventDefault();
+    const name = elements.roomNameInput.value.trim();
+    const description = elements.roomDescriptionInput.value.trim();
+
+    if (name.length < 3) {
+      showToast("Room name must be at least 3 characters.", "error");
+      return;
+    }
 
     try {
       const payload = await api("/api/rooms", {
         method: "POST",
         body: {
-          name: elements.roomNameInput.value.trim(),
-          description: elements.roomDescriptionInput.value.trim()
+          name,
+          description
         }
       });
 
@@ -2257,10 +2514,20 @@
     event.preventDefault();
 
     try {
+      const profilePayload = await api("/api/me/profile", {
+        method: "PATCH",
+        body: {
+          displayName: elements.profileDisplayNameInput.value.trim(),
+          statusMessage: elements.profileStatusMessageInput.value.trim(),
+          onboardingCompleted: true
+        }
+      });
+
       const payload = await api("/api/me/preferences", {
         method: "PATCH",
         body: {
           preferences: {
+            ...profilePayload.user.preferences,
             fontFamily: elements.fontSelect.value,
             textColor: elements.accentColorInput.value,
             backgroundStyle: elements.backgroundStyleSelect.value,
@@ -2273,9 +2540,11 @@
       });
 
       state.me = payload.user;
+      state.needsOnboarding = false;
       applyPreferences();
       closeAccountMenu();
-      showToast("Appearance updated.", "success");
+      renderRooms();
+      showToast("Profile and settings updated.", "success");
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -2751,6 +3020,11 @@
     elements.guestForm.addEventListener("submit", handleGuestJoin);
     elements.loginForm.addEventListener("submit", handleLogin);
     elements.registerForm.addEventListener("submit", handleRegister);
+    elements.registerPassword.addEventListener("input", function () {
+      const strength = passwordStrengthLabel(elements.registerPassword.value);
+      elements.registerPasswordStrength.textContent = strength.label;
+      elements.registerPasswordStrength.className = `password-strength ${strength.tone}`;
+    });
     elements.messageForm.addEventListener("submit", handleMessageSubmit);
     elements.messageInput.addEventListener("input", handleTypingInput);
     elements.messageInput.addEventListener("input", function () {
@@ -2822,6 +3096,9 @@
     });
     elements.logoutBtn.addEventListener("click", function () {
       logout(true);
+    });
+    elements.retryConnectionBtn.addEventListener("click", function () {
+      retryLiveConnection();
     });
     elements.presenceStatusSelect.addEventListener("change", function () {
       if (!state.socket) {
@@ -3028,6 +3305,14 @@
       closeModal(elements.roomModalOverlay);
     });
     elements.roomForm.addEventListener("submit", handleCreateRoom);
+    elements.copyRoomLinkBtn.addEventListener("click", async function () {
+      try {
+        await copyText(getActiveRoomLink());
+        showToast("Room link copied.", "success");
+      } catch (_error) {
+        showToast("Unable to copy the room link on this device.", "error");
+      }
+    });
 
     elements.accountBadge.addEventListener("pointerdown", toggleAccountMenu);
     elements.accountBadge.addEventListener("keydown", function (event) {
@@ -3066,16 +3351,3 @@
   bindEvents();
   bootstrap();
 })();
-  function positionAccountMenu() {
-    const buttonRect = elements.accountBadge.getBoundingClientRect();
-    const panelWidth = Math.min(360, window.innerWidth - 24);
-    const left = Math.min(
-      Math.max(12, buttonRect.right - panelWidth),
-      Math.max(12, window.innerWidth - panelWidth - 12)
-    );
-    const top = Math.min(buttonRect.bottom + 10, Math.max(72, window.innerHeight - 180));
-    elements.accountMenu.style.width = `${panelWidth}px`;
-    elements.accountMenu.style.left = `${left}px`;
-    elements.accountMenu.style.top = `${top}px`;
-    elements.accountMenu.style.maxHeight = `${Math.max(220, window.innerHeight - top - 12)}px`;
-  }

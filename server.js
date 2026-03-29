@@ -11,6 +11,12 @@ const AUTH_SECRET = process.env.AUTH_SECRET || "chatdude-dev-secret-change-me";
 const MAX_ROOM_MESSAGES = 120;
 const MAX_PRIVATE_MESSAGES = 60;
 const PRESENCE_IDLE_MS = 1000 * 60 * 10;
+const PREMIUM_USERNAMES = new Set(
+  String(process.env.PREMIUM_USERNAMES || "")
+    .split(",")
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+);
 const DEFAULT_ROOMS = [
   {
     id: "room-general",
@@ -60,6 +66,7 @@ let store = {
   privateMessages: []
 };
 let persistence;
+const rateLimitBuckets = new Map();
 
 function createTimestampPayload(date = new Date()) {
   return {
@@ -115,6 +122,20 @@ function isValidGuestName(value) {
 
 function isValidPassword(value) {
   return typeof value === "string" && value.length >= 8 && value.length <= 72;
+}
+
+function isValidDisplayName(value) {
+  return typeof value === "string" && /^[a-zA-Z0-9 _-]{2,24}$/.test(value.trim());
+}
+
+function getPasswordStrength(value) {
+  const password = String(value || "");
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
+  if (/\d/.test(password)) score += 1;
+  if (/[^a-zA-Z0-9]/.test(password)) score += 1;
+  return score;
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -200,6 +221,9 @@ function sanitizePreferences(preferences = {}) {
   ];
   const backgrounds = ["aurora", "midnight", "sunrise"];
   const privacy = preferences.privacy || {};
+  const statusMessage = normalizeUsername(String(preferences.statusMessage || ""))
+    .replace(/\s+/g, " ")
+    .slice(0, 80);
   const textColor = /^#[0-9a-fA-F]{6}$/.test(preferences.textColor || "")
     ? preferences.textColor
     : (/^#[0-9a-fA-F]{6}$/.test(preferences.accentColor || "")
@@ -216,6 +240,9 @@ function sanitizePreferences(preferences = {}) {
     backgroundStyle: backgrounds.includes(preferences.backgroundStyle)
       ? preferences.backgroundStyle
       : "aurora",
+    statusMessage,
+    onboardingCompleted: Boolean(preferences.onboardingCompleted),
+    lastSeenAt: typeof preferences.lastSeenAt === "string" ? preferences.lastSeenAt : null,
     showJoinLeaveMessages: preferences.showJoinLeaveMessages !== false,
     allowPrivateCalls: preferences.allowPrivateCalls !== false,
     privacy: {
@@ -249,6 +276,42 @@ function sanitizePresenceStatus(value) {
   return ["online", "busy"].includes(value) ? value : "online";
 }
 
+function getUserPlan(userLike) {
+  if (!userLike || userLike.accountType === "guest") {
+    return "guest";
+  }
+
+  return PREMIUM_USERNAMES.has(String(userLike.username || "").toLowerCase())
+    ? "premium"
+    : "free_registered";
+}
+
+function getFeatureFlags(userLike) {
+  const plan = getUserPlan(userLike);
+  return {
+    canCreateRooms: plan !== "guest",
+    canPrivateMessage: plan !== "guest",
+    canBroadcastCamera: true,
+    canCreatePrivateRooms: plan === "premium",
+    canUseRoomBranding: plan === "premium",
+    hasExtendedPmHistory: plan === "premium",
+    hasAdvancedModeration: plan === "premium"
+  };
+}
+
+function consumeRateLimit(key, limit, windowMs) {
+  const now = Date.now();
+  const recent = (rateLimitBuckets.get(key) || []).filter((timestamp) => now - timestamp < windowMs);
+  if (recent.length >= limit) {
+    rateLimitBuckets.set(key, recent);
+    return false;
+  }
+
+  recent.push(now);
+  rateLimitBuckets.set(key, recent);
+  return true;
+}
+
 function getEffectivePresenceStatus(session) {
   if (!session) {
     return "online";
@@ -270,11 +333,14 @@ function touchSession(session) {
 }
 
 function toPublicUser(user) {
+  const featureFlags = getFeatureFlags({ ...user, accountType: "registered" });
   return {
     id: user.id,
     username: user.username,
     displayName: user.displayName,
     accountType: "registered",
+    plan: getUserPlan({ ...user, accountType: "registered" }),
+    featureFlags,
     preferences: sanitizePreferences(user.preferences || {}),
     blockedUsers: sanitizeBlockedUsers(user.blockedUsers || []),
     friends: sanitizeFriends(user.friends || [])
@@ -282,15 +348,18 @@ function toPublicUser(user) {
 }
 
 function serializeSession(session) {
+  const featureFlags = getFeatureFlags(session);
   return {
     id: session.id,
     username: session.username,
     displayName: session.displayName,
     accountType: session.accountType,
     isGuest: session.accountType === "guest",
+    plan: getUserPlan(session),
     canCustomize: session.accountType === "registered",
-    canCreateRooms: session.accountType === "registered",
-    canPrivateMessage: session.accountType === "registered",
+    canCreateRooms: featureFlags.canCreateRooms,
+    canPrivateMessage: featureFlags.canPrivateMessage,
+    featureFlags,
     presenceStatus: sanitizePresenceStatus(session.presenceStatus),
     effectivePresenceStatus: getEffectivePresenceStatus(session),
     preferences: sanitizePreferences(session.preferences || {}),
@@ -625,13 +694,23 @@ app.post("/api/auth/register", async (req, res) => {
   const displayName = normalizeUsername(req.body.displayName || username);
   const password = req.body.password || "";
 
+  if (!consumeRateLimit(`auth-register:${req.ip}`, 8, 10 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many registration attempts. Please wait a few minutes." });
+    return;
+  }
+
   if (!isValidUsername(username)) {
     res.status(400).json({ error: "Username must be 3-20 characters using letters, numbers, or underscores." });
     return;
   }
 
-  if (!isValidPassword(password)) {
-    res.status(400).json({ error: "Password must be between 8 and 72 characters." });
+  if (!isValidDisplayName(displayName)) {
+    res.status(400).json({ error: "Display name must be 2-24 characters using letters, numbers, spaces, dashes, or underscores." });
+    return;
+  }
+
+  if (!isValidPassword(password) || getPasswordStrength(password) < 3) {
+    res.status(400).json({ error: "Password must be 8-72 characters and include a stronger mix of letters, numbers, or symbols." });
     return;
   }
 
@@ -646,7 +725,7 @@ app.post("/api/auth/register", async (req, res) => {
     displayName: displayName.slice(0, 24),
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
-    preferences: sanitizePreferences({}),
+    preferences: sanitizePreferences({ onboardingCompleted: false }),
     blockedUsers: [],
     friends: []
   };
@@ -664,6 +743,11 @@ app.post("/api/auth/login", (req, res) => {
   const username = normalizeUsername(req.body.username || "");
   const password = req.body.password || "";
   const user = findUserByUsername(username);
+
+  if (!consumeRateLimit(`auth-login:${req.ip}`, 15, 10 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many login attempts. Please wait a few minutes." });
+    return;
+  }
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
     res.status(401).json({ error: "Invalid username or password." });
@@ -691,6 +775,41 @@ function requireAuth(req, res, next) {
 }
 
 app.get("/api/me", requireAuth, (req, res) => {
+  res.json({ user: toPublicUser(req.user) });
+});
+
+app.patch("/api/me/profile", requireAuth, async (req, res) => {
+  const displayName = normalizeUsername(req.body.displayName || req.user.displayName || "");
+  const preferences = sanitizePreferences({
+    ...(req.user.preferences || {}),
+    statusMessage: req.body.statusMessage,
+    onboardingCompleted: req.body.onboardingCompleted
+      ?? req.user.preferences?.onboardingCompleted,
+    lastSeenAt: req.user.preferences?.lastSeenAt || null
+  });
+
+  if (!isValidDisplayName(displayName)) {
+    res.status(400).json({ error: "Display name must be 2-24 characters using letters, numbers, spaces, dashes, or underscores." });
+    return;
+  }
+
+  req.user.displayName = displayName;
+  req.user.preferences = preferences;
+  await persistence.updateUser(req.user);
+
+  for (const [socketId, session] of onlineUsers.entries()) {
+    if (session.id === req.user.id) {
+      const nextSession = {
+        ...session,
+        displayName,
+        preferences
+      };
+      onlineUsers.set(socketId, nextSession);
+      io.to(socketId).emit("preferences updated", preferences);
+      io.to(socketId).emit("presence updated", serializeSession(nextSession));
+    }
+  }
+
   res.json({ user: toPublicUser(req.user) });
 });
 
@@ -822,6 +941,11 @@ app.post("/api/rooms", requireAuth, async (req, res) => {
   const name = normalizeUsername(req.body.name || "");
   const description = normalizeUsername(req.body.description || "");
   const slug = slugifyRoomName(name);
+
+  if (!consumeRateLimit(`room-create:${req.user.id}`, 8, 10 * 60 * 1000)) {
+    res.status(429).json({ error: "You are creating rooms too quickly. Please wait a bit." });
+    return;
+  }
 
   if (!name || name.length < 3) {
     res.status(400).json({ error: "Room name must be at least 3 characters." });
@@ -1013,6 +1137,10 @@ io.on("connection", (socket) => {
     const trimmed = String(message || "").trim();
 
     if (!currentSession || !currentSession.roomSlug || !trimmed) return;
+    if (!consumeRateLimit(`chat:${currentSession.id}:${currentSession.roomSlug}`, 14, 12 * 1000)) {
+      socket.emit("error message", "You are sending messages too quickly.");
+      return;
+    }
     touchSession(currentSession);
 
     const room = getRoomBySlug(currentSession.roomSlug);
@@ -1068,6 +1196,10 @@ io.on("connection", (socket) => {
     const trimmed = String(message || "").trim();
 
     if (!currentSession || !recipientSession || !trimmed) return;
+    if (!consumeRateLimit(`pm:${currentSession.id}:${recipientSession.id}`, 10, 12 * 1000)) {
+      socket.emit("error message", "You are sending private messages too quickly.");
+      return;
+    }
     touchSession(currentSession);
 
     if (sessionBlocksUsername(recipientSession, currentSession.username) || sessionBlocksUsername(currentSession, recipientSession.username)) {
@@ -1112,6 +1244,10 @@ io.on("connection", (socket) => {
     const currentSession = onlineUsers.get(socket.id);
     const targetSession = onlineUsers.get(toSocketId);
     if (!currentSession || !targetSession) return;
+    if (!consumeRateLimit(`pm-call:${currentSession.id}:${targetSession.id}`, 4, 20 * 1000)) {
+      socket.emit("error message", "Please wait a moment before sending another call request.");
+      return;
+    }
     if (!canInitiatePrivateCall(currentSession, targetSession)) {
       socket.emit("error message", "Guests cannot start private calls with registered users.");
       return;
@@ -1380,9 +1516,24 @@ io.on("connection", (socket) => {
     emitRoomList();
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
     const currentSession = onlineUsers.get(socket.id);
     onlineUsers.delete(socket.id);
+
+    if (currentSession?.accountType === "registered") {
+      const storedUser = findUserById(currentSession.id);
+      if (storedUser) {
+        storedUser.preferences = sanitizePreferences({
+          ...(storedUser.preferences || {}),
+          lastSeenAt: new Date().toISOString()
+        });
+        try {
+          await persistence.updateUser(storedUser);
+        } catch (error) {
+          console.error("Failed to persist disconnect state.", error);
+        }
+      }
+    }
 
     if (currentSession?.roomSlug) {
       updateUserList(currentSession.roomSlug);

@@ -1,93 +1,140 @@
 # ChatDude
 
-ChatDude is a lightweight realtime chat app built for a static frontend on GitHub Pages and a Node.js + Socket.IO backend on Render.
+ChatDude is a lightweight hosted community chat product built for a static GitHub Pages frontend and a low-cost Render backend. The goal is not just "realtime chat works," but "this feels like something you could demo, grow, and eventually sell."
 
-## What is in this version
+## What It Is
 
-- Guest mode for quick room access
-- Account creation and login with password-based auth
-- Saved appearance preferences for registered users
-- Public room history persisted on the backend
-- Custom room creation for registered users
-- Private messaging for registered users
-- Lightweight published camera/audio streams for registered users
-- Guest auto-reconnect using the last guest name on the same device
-- Basic moderation: room creators can delete their rooms, and registered users can delete their own messages
-- Room presence, typing indicators, and clickable user actions
-- Responsive, modernized UI split into [index.html](C:\Users\dontb\OneDrive\Desktop\chat-app\index.html), [styles.css](C:\Users\dontb\OneDrive\Desktop\chat-app\styles.css), and [app.js](C:\Users\dontb\OneDrive\Desktop\chat-app\app.js)
+ChatDude is designed for:
 
-## Architecture
+- lightweight niche communities
+- private invite-style groups
+- hobby groups or creator communities
+- demo-friendly hosted chat rooms with a clear upgrade path
 
-- Frontend: static files hosted by GitHub Pages
-- Backend: [server.js](C:\Users\dontb\OneDrive\Desktop\chat-app\server.js) on Express + Socket.IO
-- Transport: cross-origin HTTP + Socket.IO with CORS support
-- Persistence: hosted Postgres when `DATABASE_URL` is set, otherwise a local JSON fallback at `data/store.json`
+It supports fast guest entry, registered accounts, custom rooms, friends, private messaging, and lightweight browser-based media without forcing a full paid infrastructure stack on day one.
 
-## Persistence
+## Feature Snapshot
 
-ChatDude now supports two persistence modes:
+### Core chat
 
-- `Postgres` when `DATABASE_URL` is configured
-- `file` fallback when `DATABASE_URL` is missing
+- guest entry with a low-friction join flow
+- account registration and login
+- room switching with room picker
+- room history persistence
+- custom room creation for registered users
+- typing indicators
+- polished inline timestamps using the viewer's local time
 
-For Render production use, you should set `DATABASE_URL` so accounts, rooms, room history, and private-message history survive redeploys.
+### Social layer
 
-The backend will automatically:
+- private messaging inbox
+- draggable PM window
+- friend list and friend room-entry notices
+- block/unblock controls
+- presence states: online, busy, idle
+- saved profile basics: display name and status message
 
-- create the required Postgres tables on boot
-- seed the default rooms
-- import existing `data/store.json` data once if the database is still empty
+### Media
 
-That means you can migrate from the old file-backed store without manually rebuilding users and rooms.
+- lightweight published room camera windows
+- private voice/video call flows in PMs
+- draggable/resizable media windows
+- privacy controls around camera visibility
 
-## Local development
+### Product/value signals
 
-1. Install dependencies with `npm install`
-2. Start the backend with `npm start`
-3. Open [index.html](C:\Users\dontb\OneDrive\Desktop\chat-app\index.html) in a browser or serve the repo root with any static file server
+- plan model in code: `Guest`, `Free Registered`, `Premium`
+- feature flags exposed in session data for future billing gates
+- stronger auth validation and password strength checks
+- reconnect/cold-start banner for Render free-tier behavior
+- room link sharing for demo/invite flows
+- privacy/terms placeholder pages
 
-By default, the frontend points at `https://chatdude-1091.onrender.com`.
+## Stack
 
-## Deployment
+- Frontend: static HTML, CSS, and vanilla JS
+- Backend: Node.js, Express, Socket.IO
+- Persistence: Postgres when `DATABASE_URL` is set, otherwise JSON file fallback
+- Hosting:
+  - GitHub Pages for frontend
+  - Render web service for backend
 
-### Render backend
+This repo intentionally avoids a build step so deployment stays simple and cheap.
 
-- Service name: `ChatDude`
-- Start command: `npm start`
-- Port: `process.env.PORT || 3000`
+## Architecture Summary
 
-Recommended environment variables:
+- [index.html](C:\Users\dontb\OneDrive\Desktop\chat-app\index.html): static app shell and UI structure
+- [styles.css](C:\Users\dontb\OneDrive\Desktop\chat-app\styles.css): visual system and layout
+- [app.js](C:\Users\dontb\OneDrive\Desktop\chat-app\app.js): client state, auth flows, rooms, PMs, media UX, reconnect handling
+- [server.js](C:\Users\dontb\OneDrive\Desktop\chat-app\server.js): auth, APIs, Socket.IO events, validation, rate limiting, session state
+- [persistence.js](C:\Users\dontb\OneDrive\Desktop\chat-app\persistence.js): Postgres/file persistence adapter
+
+## Free-Tier Constraints
+
+ChatDude is optimized around the current low-cost setup, but there are real limits:
+
+- Render free web services can cold-start after inactivity. The app now handles that with clearer loading/reconnect messaging instead of pretending the app is broken.
+- Do not rely on a newly created free Render Postgres instance for critical long-term storage unless you accept its lifecycle limits.
+- Browser media is intentionally lightweight and peer-to-peer. It is suitable for small calls and camera sharing, not large-scale group video.
+- No Redis, paid TURN, paid object storage, or billing stack is required right now.
+
+## Persistence Modes
+
+ChatDude supports two persistence modes:
+
+- `postgres`: recommended for production
+- `file`: local fallback only
+
+The backend automatically:
+
+- creates required Postgres tables on boot
+- seeds default rooms
+- imports `data/store.json` once if the database is empty
+
+If `DATABASE_URL` is missing, the app falls back to file storage and redeploys can wipe accounts/history.
+
+## Environment Variables
+
+Recommended Render variables:
 
 ```env
 CLIENT_ORIGIN=https://your-github-pages-site.github.io
 AUTH_SECRET=replace-this-with-a-long-random-secret
 DATABASE_URL=postgresql://...
+PREMIUM_USERNAMES=comma,separated,usernames
+PGSSL_DISABLE=false
 ```
 
 Notes:
 
-- `CLIENT_ORIGIN` can be a comma-separated list of allowed frontend origins.
-- `AUTH_SECRET` should be set in Render so account tokens are not signed with the development fallback secret.
-- `DATABASE_URL` should point to a hosted Postgres database. This is the recommended production setup for stopping account loss on redeploy.
-- If you are connecting to a local Postgres instance without SSL, you can set `PGSSL_DISABLE=true`.
-- Published cameras use browser WebRTC over HTTPS with Socket.IO signaling through the existing Render backend.
-- This implementation is optimized for small-room viewing on free-tier hosting by using direct peer-to-peer connections instead of a separate media server.
+- `CLIENT_ORIGIN` may be a comma-separated list.
+- `AUTH_SECRET` should always be set in production.
+- `DATABASE_URL` should point to a hosted Postgres database if you want persistence across deploys.
+- `PREMIUM_USERNAMES` is an admin/development feature gate for monetization readiness before billing exists.
+- `PGSSL_DISABLE=true` is only for local or non-SSL Postgres.
 
-### Hosted database options
+## Local Setup
 
-This backend is written against standard Postgres, so practical free-tier-friendly options include:
+1. Run `npm install`
+2. Run `npm start`
+3. Open [index.html](C:\Users\dontb\OneDrive\Desktop\chat-app\index.html) directly or serve the repo root with a static server
 
-- Neon
-- Supabase Postgres
-- Render Postgres
+By default, the frontend targets `https://chatdude-1091.onrender.com`.
 
-If you already use Render for the web service, Render Postgres is the most direct setup. If you want the smallest possible always-on free-tier footprint, Neon is a good fit too.
+## Deployment Notes
 
-### GitHub Pages frontend
+### Render
 
-The frontend stays static-host friendly. No build step is required.
+- Service name: `ChatDude`
+- Start command: `npm start`
+- Port: `process.env.PORT || 3000`
 
-If you ever need to point the frontend at a different backend, override the config before loading [app.js](C:\Users\dontb\OneDrive\Desktop\chat-app\app.js):
+### GitHub Pages
+
+- No build step required
+- Frontend remains static-host friendly
+
+To override the backend URL:
 
 ```html
 <script>
@@ -97,20 +144,54 @@ If you ever need to point the frontend at a different backend, override the conf
 </script>
 ```
 
-## Account model
+## Demo-Friendly Default Experience
 
-- Guests can join public rooms and post room messages
-- Registered users can log in, save appearance settings, create custom rooms, and send private messages
-- Passwords are hashed server-side with Node's built-in `crypto.scryptSync`
+Out of the box, ChatDude is seeded with:
 
-## Runtime files
+- `General`
+- `Random`
+- `Gaming`
 
-- `data/store.json` is generated automatically at runtime and is gitignored
-- `data/.gitkeep` exists only so the runtime data directory is present in the repo
+That gives a fresh deploy a usable, understandable starting point immediately.
 
-## Next sensible upgrades
+## Monetization Readiness
 
-1. Add moderation actions like mute, kick, and room ownership controls
-2. Persist richer private-message threads and inbox state server-side
-3. Add reconnect-aware session restoration for guests
-4. Add password reset and email-backed auth later if needed
+ChatDude does not include billing yet, but the app now has a plan structure in code so payments can be layered in later without a large refactor:
+
+- `Guest`
+- `Free Registered`
+- `Premium`
+
+Current premium-oriented gates are code-ready for:
+
+- private room creation
+- room branding/customization
+- extended PM history
+- advanced moderation
+
+The current setup is intentionally informational/admin-gated rather than payment-backed.
+
+## Roadmap
+
+### Still fits current free/low-cost setup
+
+- better room moderation UX
+- richer PM conversation management
+- better mobile-specific layout polish
+- improved onboarding copy and guided first-run experience
+- room invite landing improvements
+
+### When it becomes worth paying
+
+- paid TURN/SFU for reliable larger media usage
+- object storage for avatars/uploads
+- email/password reset flows
+- billing integration
+- richer moderation tooling backed by more robust infrastructure
+
+## Trust Pages
+
+- [Privacy](C:\Users\dontb\OneDrive\Desktop\chat-app\privacy.html)
+- [Terms](C:\Users\dontb\OneDrive\Desktop\chat-app\terms.html)
+
+These are lightweight placeholders suitable for early demos, not final legal advice.

@@ -51,6 +51,7 @@
           <button class="tab-button" data-tab="login" type="button">Login</button>
           <button class="tab-button" data-tab="register" type="button">Create Account</button>
         </div>
+        <p id="auth-inline-status" class="inline-status hidden"></p>
 
         <div class="tab-panel is-active" data-panel="guest">
           <h2>Join in seconds</h2>
@@ -100,8 +101,16 @@
               <span>Password</span>
               <input id="register-password" type="password" maxlength="72" placeholder="8+ characters" />
             </label>
+            <div id="register-password-strength" class="password-strength subtle-copy">Use 8+ characters with a stronger mix of letters, numbers, and symbols.</div>
             <button type="submit">Create Account</button>
           </form>
+        </div>
+        <div class="auth-footer">
+          <span>By using ChatDude you agree to the community rules, privacy notes, and basic terms.</span>
+          <div class="auth-footer-links">
+            <a href="./privacy.html" target="_blank" rel="noreferrer">Privacy</a>
+            <a href="./terms.html" target="_blank" rel="noreferrer">Terms</a>
+          </div>
         </div>
       </div>
     </section>
@@ -135,6 +144,13 @@
           <button id="account-badge" class="account-badge account-badge-button" type="button" aria-haspopup="dialog" aria-expanded="false"></button>
         </div>
       </header>
+      <div id="connection-banner" class="connection-banner hidden">
+        <div>
+          <strong id="connection-banner-title">Connecting...</strong>
+          <span id="connection-banner-text">Waking ChatDude up and reconnecting to live rooms.</span>
+        </div>
+        <button id="retry-connection-btn" class="ghost-button" type="button">Retry</button>
+      </div>
 
       <div class="app-grid">
         <section class="workspace">
@@ -200,9 +216,9 @@
           <div class="room-picker-header">
             <div>
               <span class="eyebrow">Choose A Room</span>
-              <h3>Where do you want to jump in?</h3>
+              <h3 id="room-picker-title">Where do you want to jump in?</h3>
             </div>
-            <p class="subtle-copy">Pick a room before joining the live chat.</p>
+            <p id="room-picker-copy" class="subtle-copy">Pick a room before joining the live chat.</p>
           </div>
           <div id="room-picker-list" class="room-picker-list"></div>
         </div>
@@ -228,6 +244,21 @@
       <button id="account-menu-close-btn" class="icon-button" type="button">Close</button>
     </div>
     <form id="preferences-form" class="stack-form account-menu-form">
+      <div class="plan-card">
+        <div>
+          <span class="eyebrow">Plan</span>
+          <strong id="plan-name">Guest</strong>
+        </div>
+        <p id="plan-description" class="subtle-copy">Fast public-room access with a lighter feature set.</p>
+      </div>
+      <label class="field">
+        <span>Display name</span>
+        <input id="profile-display-name-input" maxlength="24" placeholder="How people see you" />
+      </label>
+      <label class="field">
+        <span>Status message</span>
+        <input id="profile-status-message-input" maxlength="80" placeholder="What people should know about you" />
+      </label>
       <label class="field">
         <span>Status</span>
         <select id="presence-status-select">
@@ -277,6 +308,7 @@
       <div class="account-menu-actions">
         <button id="open-room-modal-btn" class="ghost-button hidden" type="button">New Room</button>
         <button id="delete-room-btn" class="ghost-button hidden" type="button">Delete Room</button>
+        <button id="copy-room-link-btn" class="ghost-button" type="button">Copy room link</button>
         <button id="logout-btn" class="ghost-button" type="button">Leave</button>
         <button type="submit">Save settings</button>
       </div>
@@ -357,6 +389,13 @@
   </div>
 
   <div id="toast-stack" class="toast-stack"></div>
+  <footer class="site-footer">
+    <span>ChatDude is a lightweight hosted community chat built for fast demos and private communities.</span>
+    <div class="site-footer-links">
+      <a href="./privacy.html" target="_blank" rel="noreferrer">Privacy</a>
+      <a href="./terms.html" target="_blank" rel="noreferrer">Terms</a>
+    </div>
+  </footer>
 
   <script>
     window.CHATDUDE_CONFIG = window.CHATDUDE_CONFIG || {

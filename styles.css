@@ -186,6 +186,39 @@ body.has-split-call .chat-panel {
   padding: 28px;
 }
 
+.inline-status,
+.password-strength {
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+
+.inline-status.error,
+.password-strength.error {
+  color: #fecdd3;
+  border-color: rgba(251, 113, 133, 0.28);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.inline-status.info {
+  color: #bae6fd;
+  border-color: rgba(56, 189, 248, 0.26);
+}
+
+.password-strength.success {
+  color: #bbf7d0;
+  border-color: rgba(52, 211, 153, 0.28);
+  background: rgba(6, 78, 59, 0.22);
+}
+
+.password-strength.warn {
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(120, 53, 15, 0.22);
+}
+
 .hero-panel {
   display: flex;
   flex-direction: column;
@@ -251,6 +284,35 @@ body.has-split-call .chat-panel {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
   margin-bottom: 24px;
+}
+
+.auth-footer,
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.auth-footer {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.auth-footer-links,
+.site-footer-links {
+  display: inline-flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.auth-footer a,
+.site-footer a {
+  color: color-mix(in oklab, var(--accent) 74%, white);
+  text-decoration: none;
 }
 
 .tab-button {
@@ -356,6 +418,15 @@ body.has-split-call .chat-panel {
   pointer-events: auto;
 }
 
+.plan-card {
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 8px;
+}
+
 .account-menu-header {
   display: flex;
   align-items: flex-start;
@@ -387,6 +458,25 @@ body.has-split-call .chat-panel {
   align-items: center;
   gap: 18px;
   overflow: visible;
+}
+
+.connection-banner {
+  margin: -2px 6px 8px;
+  padding: 12px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  background: rgba(8, 18, 32, 0.76);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  color: var(--muted);
+}
+
+.connection-banner strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text);
 }
 
 .brand-cluster,
@@ -1502,6 +1592,11 @@ body.has-split-call .chat-panel {
   gap: 12px;
 }
 
+.site-footer {
+  margin-top: 10px;
+  padding: 0 4px 4px;
+}
+
 .toast {
   min-width: 260px;
   max-width: 360px;
@@ -1556,7 +1651,10 @@ body.has-split-call .chat-panel {
   }
 
   .topbar,
-  .chat-panel-header {
+  .chat-panel-header,
+  .connection-banner,
+  .auth-footer,
+  .site-footer {
     flex-direction: column;
     align-items: flex-start;
   }

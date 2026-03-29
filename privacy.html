@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChatDude Privacy</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-background-style="midnight">
+  <div class="page-shell">
+    <main class="card" style="padding: 28px; max-width: 840px; margin: 32px auto;">
+      <span class="eyebrow">ChatDude</span>
+      <h1>Privacy Notes</h1>
+      <p class="subtle-copy">This is a lightweight early-stage privacy placeholder for demos and small hosted communities. It is not legal advice.</p>
+      <div class="stack-form">
+        <section>
+          <h2>What ChatDude stores</h2>
+          <p>Registered accounts store a username, display name, password hash, preferences, rooms, and message history. Guest sessions are lighter and may be more temporary.</p>
+        </section>
+        <section>
+          <h2>Realtime activity</h2>
+          <p>Presence, messages, typing, and media state are transmitted through the realtime backend so rooms and direct messaging work properly.</p>
+        </section>
+        <section>
+          <h2>Media</h2>
+          <p>Camera and call features use browser WebRTC where available. Audio/video access is requested from the browser directly and should only activate after user permission.</p>
+        </section>
+        <section>
+          <h2>Early-stage limitation</h2>
+          <p>If the app is deployed without stable Postgres persistence, data can be lost on redeploys. Production use should configure a durable database.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
