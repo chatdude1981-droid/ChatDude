@@ -139,8 +139,11 @@
             <div id="pm-inbox-popover" class="pm-inbox-popover hidden">
               <div class="pm-inbox-header">
                 <strong>Private messages</strong>
-                <span class="subtle-copy">Open a conversation.</span>
+                <span id="pm-inbox-subtitle" class="subtle-copy">Open a conversation.</span>
               </div>
+              <label class="pm-search-field" for="pm-inbox-search">
+                <input id="pm-inbox-search" type="search" placeholder="Search conversations" autocomplete="off" />
+              </label>
               <ul id="pm-feed" class="pm-feed"></ul>
             </div>
           </div>
@@ -160,6 +163,7 @@
           <main class="chat-panel card">
             <div class="chat-panel-header">
               <div class="header-side">
+                <div id="room-context" class="room-context subtle-copy"></div>
                 <div id="typing-indicator" class="typing-indicator"></div>
               </div>
             </div>
@@ -340,6 +344,7 @@
       <div>
         <span class="eyebrow">Private Message</span>
         <h3 id="pm-window-title">Conversation</h3>
+        <p id="pm-window-subtitle" class="pm-window-subtitle subtle-copy">Private conversation</p>
       </div>
       <div class="pm-window-actions">
         <button id="pm-audio-btn" class="ghost-button icon-control" type="button" aria-label="Start private voice call" title="Start private voice call">

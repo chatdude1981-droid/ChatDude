@@ -581,12 +581,36 @@ body.has-split-call .chat-panel {
   padding: 4px 6px 0;
 }
 
+.pm-search-field {
+  display: block;
+}
+
+.pm-search-field input {
+  padding: 0.8rem 0.95rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .room-pill {
-  padding: 0.8rem 1rem;
+  display: grid;
+  gap: 2px;
+  padding: 0.72rem 1rem;
   border-radius: 999px;
   background: rgba(56, 189, 248, 0.12);
   color: color-mix(in oklab, var(--accent) 68%, white);
   border: 1px solid rgba(56, 189, 248, 0.22);
+}
+
+.room-pill-name {
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.room-pill-meta {
+  font-size: 0.73rem;
+  color: color-mix(in oklab, var(--accent) 38%, white);
+  line-height: 1.1;
 }
 
 .app-grid {
@@ -643,6 +667,11 @@ body.has-split-call .chat-panel {
   text-align: left;
   box-shadow: none;
   position: relative;
+}
+
+.pm-entry-button:hover {
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .room-item {
@@ -710,10 +739,19 @@ body.has-split-call .chat-panel {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .header-side {
   align-items: center;
+}
+
+.room-context {
+  min-height: 20px;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .call-participants {
@@ -797,6 +835,13 @@ body.has-split-call .chat-panel {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.call-drag-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .call-close-btn {
@@ -899,6 +944,18 @@ body.has-split-call .chat-panel {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.call-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .call-drag-dot {
@@ -1157,6 +1214,53 @@ body.has-split-call .chat-panel {
 
 .pm-thread-bubble .message-embed-stack {
   width: min(100%, 360px);
+}
+
+.pm-entry-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 0.45rem;
+}
+
+.pm-entry-status {
+  font-size: 0.74rem;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pm-entry-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pm-entry-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.46rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pm-entry-badge.is-live,
+.pm-entry-badge.is-online {
+  background: rgba(56, 189, 248, 0.12);
+  color: color-mix(in oklab, var(--accent) 74%, white);
+}
+
+.pm-entry-preview {
+  line-height: 1.45;
 }
 
 .message-role,
@@ -1550,6 +1654,11 @@ body.has-split-call .chat-panel {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   cursor: grab;
   touch-action: none;
+}
+
+.pm-window-subtitle {
+  margin: 0.3rem 0 0;
+  line-height: 1.35;
 }
 
 .pm-window-actions {

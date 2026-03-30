@@ -58,6 +58,7 @@
     maximizedCallId: "",
     draggingCall: null,
     pmInboxOpen: false,
+    pmInboxQuery: "",
     pmUnread: {},
     activePmUser: null,
     pmWindowPosition: { x: 96, y: 132 },
@@ -111,6 +112,8 @@
     openInboxBtn: document.getElementById("open-inbox-btn"),
     inboxCount: document.getElementById("inbox-count"),
     pmInboxPopover: document.getElementById("pm-inbox-popover"),
+    pmInboxSubtitle: document.getElementById("pm-inbox-subtitle"),
+    pmInboxSearch: document.getElementById("pm-inbox-search"),
     presenceStatusSelect: document.getElementById("presence-status-select"),
     accountMenu: document.getElementById("account-menu"),
     accountMenuTitle: document.getElementById("account-menu-title"),
@@ -137,6 +140,7 @@
     messages: document.getElementById("messages"),
     messageForm: document.getElementById("message-form"),
     messageInput: document.getElementById("message-input"),
+    roomContext: document.getElementById("room-context"),
     typingIndicator: document.getElementById("typing-indicator"),
     usersList: document.getElementById("users-list"),
     friendsList: document.getElementById("friends-list"),
@@ -152,6 +156,7 @@
     menuKickBtn: document.getElementById("menu-kick-btn"),
     pmWindow: document.getElementById("pm-window"),
     pmWindowTitle: document.getElementById("pm-window-title"),
+    pmWindowSubtitle: document.getElementById("pm-window-subtitle"),
     pmWindowCloseBtn: document.getElementById("pm-window-close-btn"),
     pmRequestBanner: document.getElementById("pm-request-banner"),
     pmWindowMedia: document.getElementById("pm-window-media"),
@@ -272,6 +277,90 @@
       hour: "numeric",
       minute: "2-digit"
     });
+  }
+
+  function summarizeTextPreview(text, limit) {
+    const collapsed = String(text || "").replace(/\s+/g, " ").trim();
+    if (!collapsed) {
+      return "No preview yet";
+    }
+
+    const maxLength = limit || 86;
+    if (collapsed.length <= maxLength) {
+      return collapsed;
+    }
+
+    return `${collapsed.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+  }
+
+  function getRoomKindLabel(room) {
+    if (!room) {
+      return "";
+    }
+
+    if (room.adultOnly) {
+      return room.system ? "Official 18+" : "Community 18+";
+    }
+
+    return room.system ? "Official room" : "Community room";
+  }
+
+  function getRoomContextText(room) {
+    if (!room) {
+      return "Pick a room to start chatting live.";
+    }
+
+    const parts = [
+      `${room.onlineCount || 0} online`,
+      getRoomKindLabel(room)
+    ];
+
+    if (room.topic) {
+      parts.push(room.topic);
+    } else if (room.description) {
+      parts.push(room.description);
+    }
+
+    return parts.filter(Boolean).join(" • ");
+  }
+
+  function getPmConversationSubtitle(conversation) {
+    const targetUser = getConversationTarget(conversation.username);
+    const bits = [];
+
+    if (targetUser?.isPublishing) {
+      bits.push("Live now");
+    }
+
+    bits.push(targetUser?.socketId ? "Online" : "Offline");
+
+    if (conversation.statusMessage) {
+      bits.push(conversation.statusMessage);
+    } else if (conversation.accountType === "registered") {
+      bits.push("Registered");
+    }
+
+    return bits.join(" • ");
+  }
+
+  function compareUsers(left, right) {
+    const leftSelf = left.socketId === state.currentSocketId;
+    const rightSelf = right.socketId === state.currentSocketId;
+    if (leftSelf !== rightSelf) {
+      return leftSelf ? -1 : 1;
+    }
+
+    if (Boolean(left.isPublishing) !== Boolean(right.isPublishing)) {
+      return left.isPublishing ? -1 : 1;
+    }
+
+    const leftRegistered = !left.isGuest;
+    const rightRegistered = !right.isGuest;
+    if (leftRegistered !== rightRegistered) {
+      return leftRegistered ? -1 : 1;
+    }
+
+    return String(left.displayName || left.username || "").localeCompare(String(right.displayName || right.username || ""));
   }
 
   function showToast(message, tone) {
@@ -879,6 +968,21 @@
     friends
       .slice()
       .sort(function (left, right) {
+        const leftUser = state.users.find(function (user) {
+          return user.username === left;
+        });
+        const rightUser = state.users.find(function (user) {
+          return user.username === right;
+        });
+
+        if (Boolean(leftUser) !== Boolean(rightUser)) {
+          return leftUser ? -1 : 1;
+        }
+
+        if (Boolean(leftUser?.isPublishing) !== Boolean(rightUser?.isPublishing)) {
+          return leftUser?.isPublishing ? -1 : 1;
+        }
+
         return left.localeCompare(right);
       })
       .forEach(function (username) {
@@ -1059,9 +1163,14 @@
 
     const activeRoom = roomBySlug(state.activeRoom);
     if (activeRoom) {
-      elements.activeRoomPill.textContent = `${activeRoom.name} room`;
+      elements.activeRoomPill.innerHTML = `
+        <span class="room-pill-name">${escapeHtml(activeRoom.name)}</span>
+        <span class="room-pill-meta">${escapeHtml(`${activeRoom.onlineCount || 0} online • ${getRoomKindLabel(activeRoom)}`)}</span>
+      `;
+      elements.roomContext.textContent = getRoomContextText(activeRoom);
     } else {
       elements.activeRoomPill.textContent = "Choose a room";
+      elements.roomContext.textContent = "Pick a room to start chatting live.";
     }
     elements.leaveRoomBtn.classList.toggle("hidden", !isInActiveRoom());
     elements.accountLeaveRoomBtn.classList.toggle("hidden", !isInActiveRoom());
@@ -1204,8 +1313,14 @@
       const dragBar = document.createElement("div");
       dragBar.className = "call-drag-bar";
       dragBar.dataset.callDragHandle = "true";
+      const callStateLabel = participant.socketId === state.currentSocketId
+        ? (state.cameraEnabled ? "Live" : "Mic only")
+        : (participant.cameraEnabled ? "Live" : "Audio only");
       dragBar.innerHTML = `
-        <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
+        <div class="call-drag-meta">
+          <strong>${escapeHtml(participant.displayName || participant.username)}</strong>
+          <span class="call-status-pill">${escapeHtml(callStateLabel)}</span>
+        </div>
         <div class="call-drag-actions">
           <button
             type="button"
@@ -1418,7 +1533,7 @@
   function renderUsers() {
     elements.usersList.innerHTML = "";
 
-    const everyone = state.users.slice();
+    const everyone = state.users.slice().sort(compareUsers);
 
     if (!everyone.length) {
       elements.usersList.innerHTML = '<li class="empty-state">Nobody is here yet.</li>';
@@ -1573,15 +1688,21 @@
       }
 
       const existing = map.get(username);
+      const targetUser = getConversationTarget(username);
+      const previewDirection = entry.direction === "outgoing" ? "You: " : "";
       if (!existing || new Date(entry.timestamp || 0).getTime() >= new Date(existing.timestamp || 0).getTime()) {
         map.set(username, {
           username,
           label: getConversationLabel(entry),
-          message: entry.message,
+          message: `${previewDirection}${summarizeTextPreview(entry.message, 92)}`,
           preferences: entry.preferences || {},
           timestamp: entry.timestamp,
           time: entry.time,
-          unread: Number(state.pmUnread[username] || 0)
+          unread: Number(state.pmUnread[username] || 0),
+          accountType: targetUser?.accountType || "",
+          statusMessage: targetUser?.preferences?.statusMessage || "",
+          isOnline: Boolean(targetUser?.socketId),
+          isPublishing: Boolean(targetUser?.isPublishing)
         });
       }
     });
@@ -1600,7 +1721,11 @@
           preferences: {},
           timestamp: "",
           time: "",
-          unread: Number(state.pmUnread[username] || 0)
+          unread: Number(state.pmUnread[username] || 0),
+          accountType: "",
+          statusMessage: "",
+          isOnline: false,
+          isPublishing: false
         });
       });
     }
@@ -1623,22 +1748,53 @@
     elements.pmFeed.innerHTML = "";
     updateInboxCount();
 
-    const conversations = buildPmConversations();
+    const allConversations = buildPmConversations();
+    const query = state.pmInboxQuery.trim().toLowerCase();
+    const conversations = allConversations.filter(function (conversation) {
+      if (!query) {
+        return true;
+      }
+
+      return [
+        conversation.username,
+        conversation.label,
+        conversation.message,
+        conversation.statusMessage
+      ].some(function (value) {
+        return String(value || "").toLowerCase().includes(query);
+      });
+    });
+
+    elements.pmInboxSubtitle.textContent = query
+      ? `${conversations.length} match${conversations.length === 1 ? "" : "es"}`
+      : `${allConversations.length} conversation${allConversations.length === 1 ? "" : "s"}`;
+
     if (!conversations.length) {
-      elements.pmFeed.innerHTML = '<li class="empty-state">Your private conversations will show up here.</li>';
+      elements.pmFeed.innerHTML = query
+        ? '<li class="empty-state">No conversations match that search yet.</li>'
+        : '<li class="empty-state">Your private conversations will show up here.</li>';
       return;
     }
 
     conversations.forEach(function (conversation) {
       const item = document.createElement("li");
       item.className = "pm-entry";
+      const badges = [];
+      if (conversation.isPublishing) {
+        badges.push('<span class="pm-entry-badge is-live">Live</span>');
+      }
+      badges.push(`<span class="pm-entry-badge${conversation.isOnline ? " is-online" : ""}">${conversation.isOnline ? "Online" : "Offline"}</span>`);
       item.innerHTML = `
         <button type="button" class="pm-entry-button" data-open-pm-user="${escapeHtml(conversation.username)}">
           <div class="pm-entry-header">
             <strong style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.label)}</strong>
             <span class="pm-meta">${escapeHtml(formatTime(conversation))}</span>
           </div>
-          <div class="message-text" style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.message)}</div>
+          <div class="pm-entry-status-row">
+            <span class="pm-entry-status">${escapeHtml(getPmConversationSubtitle(conversation))}</span>
+            <span class="pm-entry-badges">${badges.join("")}</span>
+          </div>
+          <div class="message-text pm-entry-preview" style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.message)}</div>
           ${conversation.unread ? `<span class="pm-unread-badge">${escapeHtml(conversation.unread)}</span>` : ""}
         </button>
       `;
@@ -1765,6 +1921,18 @@
     const canPm = canReplyToPmConversation(state.activePmUser.username);
     const online = Boolean(targetUser && targetUser.socketId);
     const callDisabled = !online || !canInitiatePrivateCall(targetUser);
+    const subtitleParts = [];
+
+    if (targetUser?.isPublishing) {
+      subtitleParts.push("Live now");
+    }
+    subtitleParts.push(online ? "Online" : "Offline");
+    if (targetUser?.preferences?.statusMessage) {
+      subtitleParts.push(targetUser.preferences.statusMessage);
+    } else if (targetUser && !targetUser.isGuest) {
+      subtitleParts.push("Registered");
+    }
+    elements.pmWindowSubtitle.textContent = subtitleParts.join(" • ") || "Private conversation";
 
     elements.pmWindowInput.disabled = !canPm || !online;
     elements.pmSendBtn.disabled = !canPm || !online;
@@ -2144,6 +2312,10 @@
     elements.openInboxBtn.setAttribute("aria-expanded", state.pmInboxOpen ? "true" : "false");
     if (state.pmInboxOpen) {
       positionPmInbox();
+      window.setTimeout(function () {
+        elements.pmInboxSearch.focus();
+        elements.pmInboxSearch.select();
+      }, 0);
     }
   }
 
@@ -3634,6 +3806,10 @@
     elements.openInboxBtn.addEventListener("click", function (event) {
       event.stopPropagation();
       openPmInbox();
+    });
+    elements.pmInboxSearch.addEventListener("input", function () {
+      state.pmInboxQuery = elements.pmInboxSearch.value || "";
+      renderPmInbox();
     });
     elements.joinAudioBtn.addEventListener("click", function () {
       if (state.isPublishing) {
