@@ -438,20 +438,6 @@ body.has-split-call .chat-panel {
   gap: 12px;
 }
 
-.settings-group {
-  display: grid;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.028);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.settings-group-header {
-  display: grid;
-  gap: 4px;
-}
-
 .account-menu-actions {
   display: grid;
   gap: 10px;
@@ -479,24 +465,6 @@ body.has-split-call .chat-panel {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.room-feature-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.room-feature-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.34rem 0.68rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--muted);
-  font-size: 0.74rem;
 }
 
 .leave-room-btn {
@@ -613,12 +581,6 @@ body.has-split-call .chat-panel {
   padding: 4px 6px 0;
 }
 
-.pm-search-input,
-.sidebar-search-input {
-  padding: 0.8rem 0.95rem;
-  border-radius: 16px;
-}
-
 .room-pill {
   padding: 0.8rem 1rem;
   border-radius: 999px;
@@ -681,22 +643,6 @@ body.has-split-call .chat-panel {
   text-align: left;
   box-shadow: none;
   position: relative;
-}
-
-.pm-entry-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.pm-entry-dismiss {
-  min-width: 38px;
-  width: 38px;
-  padding: 0;
-  border-radius: 18px;
-  font-size: 1rem;
-  align-self: stretch;
 }
 
 .room-item {
@@ -1264,71 +1210,6 @@ body.has-split-call .chat-panel {
   align-items: center;
 }
 
-.reply-banner,
-.composer-utility-row,
-.composer-action-tray {
-  grid-column: 1 / -1;
-}
-
-.reply-banner {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 18px;
-  background: rgba(56, 189, 248, 0.08);
-  border: 1px solid rgba(56, 189, 248, 0.18);
-}
-
-.reply-banner-copy {
-  display: grid;
-  gap: 2px;
-}
-
-.reply-clear-btn {
-  min-width: auto;
-  padding: 0.55rem 0.85rem;
-}
-
-.composer-utility-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.composer-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.composer-chip,
-.composer-action {
-  width: auto;
-  min-width: 0;
-  padding: 0.55rem 0.82rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-}
-
-.composer-tools-toggle {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 999px;
-  font-size: 1.1rem;
-}
-
-.composer-action-tray {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 2px;
-}
-
 .composer-tools {
   display: flex;
   align-items: center;
@@ -1346,25 +1227,6 @@ body.has-split-call .chat-panel {
 .composer button {
   width: auto;
   min-width: 88px;
-}
-
-.message-reply-btn {
-  width: auto;
-  min-width: 0;
-  justify-self: start;
-  margin-top: 8px;
-  padding: 0.45rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  opacity: 0;
-  transform: translateY(2px);
-  transition: opacity 140ms ease, transform 140ms ease;
-}
-
-.message-item:hover .message-reply-btn,
-.message-item:focus-within .message-reply-btn {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .icon-control {
@@ -1403,10 +1265,6 @@ body.has-split-call .chat-panel {
 .side-panel {
   display: grid;
   gap: 18px;
-}
-
-.sidebar-utility {
-  margin-bottom: 12px;
 }
 
 .users-list {
@@ -1619,10 +1477,6 @@ body.has-split-call .chat-panel {
   min-height: 24px;
   font-size: 0.9rem;
   color: var(--muted);
-}
-
-.message-bubble {
-  position: relative;
 }
 
 .empty-state {
@@ -1948,10 +1802,6 @@ body.has-split-call .chat-panel {
 
   .composer {
     grid-template-columns: 1fr;
-  }
-
-  .composer-utility-row {
-    align-items: flex-start;
   }
 
   .call-card {

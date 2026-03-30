@@ -125,7 +125,6 @@
             <div class="room-pill" id="active-room-pill">Waiting for room...</div>
             <button id="leave-room-btn" class="ghost-button leave-room-btn hidden" type="button">Change room</button>
           </div>
-          <div id="room-feature-strip" class="room-feature-strip"></div>
         </div>
 
         <div class="account-cluster">
@@ -142,7 +141,6 @@
                 <strong>Private messages</strong>
                 <span class="subtle-copy">Open a conversation.</span>
               </div>
-              <input id="pm-search-input" class="pm-search-input" type="text" placeholder="Search private conversations..." />
               <ul id="pm-feed" class="pm-feed"></ul>
             </div>
           </div>
@@ -169,29 +167,6 @@
             <ul id="messages" class="messages"></ul>
 
             <form id="message-form" class="composer">
-              <div id="reply-banner" class="reply-banner hidden">
-                <div class="reply-banner-copy">
-                  <span class="eyebrow">Replying To</span>
-                  <strong id="reply-banner-title">User</strong>
-                  <span id="reply-banner-text" class="subtle-copy"></span>
-                </div>
-                <button id="clear-reply-btn" class="ghost-button reply-clear-btn" type="button">Clear</button>
-              </div>
-              <div class="composer-utility-row">
-                <div class="composer-presets" id="composer-presets">
-                  <button class="ghost-button composer-chip" type="button" data-insert-message="😀">😀</button>
-                  <button class="ghost-button composer-chip" type="button" data-insert-message="🔥">🔥</button>
-                  <button class="ghost-button composer-chip" type="button" data-insert-message="😂">😂</button>
-                  <button class="ghost-button composer-chip" type="button" data-insert-message="Check this out: ">Share</button>
-                </div>
-                <button id="toggle-composer-tools-btn" class="ghost-button composer-tools-toggle" type="button" aria-expanded="false">+</button>
-              </div>
-              <div id="composer-action-tray" class="composer-action-tray hidden">
-                <button class="ghost-button composer-action" type="button" data-insert-message="Hey everyone ">Greet Room</button>
-                <button class="ghost-button composer-action" type="button" data-insert-message="@">Mention</button>
-                <button class="ghost-button composer-action" type="button" data-insert-message="https://youtu.be/">YouTube</button>
-                <button class="ghost-button composer-action" type="button" data-composer-action="copy-room-link">Copy Room Link</button>
-              </div>
               <div class="composer-tools composer-tools-left">
                 <button id="join-audio-btn" class="ghost-button icon-control" type="button" aria-label="Publish camera" title="Publish camera">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -215,9 +190,6 @@
 
         <aside class="side-panel">
           <section class="card people-panel">
-            <div class="sidebar-utility">
-              <input id="sidebar-search-input" class="sidebar-search-input" type="text" placeholder="Filter users, friends, or rooms..." />
-            </div>
             <div class="tab-strip sidebar-tabs" id="sidebar-tabs">
               <button class="tab-button is-active" data-sidebar-tab="users" type="button">Users</button>
               <button class="tab-button" data-sidebar-tab="friends" type="button">Friends</button>
@@ -284,90 +256,72 @@
         </div>
         <p id="plan-description" class="subtle-copy">Fast public-room access with a lighter feature set.</p>
       </div>
-      <section class="settings-group">
-        <div class="settings-group-header">
-          <span class="eyebrow">Profile</span>
-          <strong>Identity and presence</strong>
-        </div>
-        <label class="field">
-          <span>Display name</span>
-          <input id="profile-display-name-input" maxlength="24" placeholder="How people see you" />
-        </label>
-        <label class="field">
-          <span>Status message</span>
-          <input id="profile-status-message-input" maxlength="80" placeholder="What people should know about you" />
-        </label>
-        <label class="field">
-          <span>Status</span>
-          <select id="presence-status-select">
-            <option value="online">Online</option>
-            <option value="busy">Busy</option>
-          </select>
-        </label>
-      </section>
-      <section class="settings-group">
-        <div class="settings-group-header">
-          <span class="eyebrow">Appearance</span>
-          <strong>Theme and typography</strong>
-        </div>
-        <label class="field">
-          <span>Font</span>
-          <select id="font-select">
-            <option value="Space Grotesk">Space Grotesk</option>
-            <option value="DM Sans">DM Sans</option>
-            <option value="Manrope">Manrope</option>
-            <option value="IBM Plex Sans">IBM Plex Sans</option>
-            <option value="Outfit">Outfit</option>
-            <option value="Sora">Sora</option>
-            <option value="Nunito">Nunito</option>
-            <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
-            <option value="Bricolage Grotesque">Bricolage Grotesque</option>
-            <option value="Figtree">Figtree</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Text color</span>
-          <input id="accent-color-input" type="color" value="#edf4ff" />
-        </label>
-        <label class="field">
-          <span>Background</span>
-          <select id="background-style-select">
-            <option value="aurora">Aurora</option>
-            <option value="midnight">Midnight</option>
-            <option value="sunrise">Sunrise</option>
-          </select>
-        </label>
-      </section>
-      <section class="settings-group">
-        <div class="settings-group-header">
-          <span class="eyebrow">Privacy</span>
-          <strong>Calls, messages, and access</strong>
-        </div>
-        <label class="field checkbox-field">
-          <input id="allow-guest-camera-view" type="checkbox" checked />
-          <span>Allow guests to view my camera</span>
-        </label>
-        <label class="field checkbox-field">
-          <input id="allow-private-calls" type="checkbox" checked />
-          <span>Allow private voice and video calls</span>
-        </label>
-        <label class="field checkbox-field">
-          <input id="friends-only-private-messages" type="checkbox" />
-          <span>Only allow private messages from friends</span>
-        </label>
-        <label class="field checkbox-field">
-          <input id="friends-only-calls" type="checkbox" />
-          <span>Only allow private calls from friends</span>
-        </label>
-        <label class="field checkbox-field">
-          <input id="adult-confirmed-input" type="checkbox" />
-          <span>I confirm I am 18 or older for adult-only rooms</span>
-        </label>
-        <div class="field">
-          <span>Blocked users</span>
-          <div id="blocked-users-list" class="blocked-users-list"></div>
-        </div>
-      </section>
+      <label class="field">
+        <span>Display name</span>
+        <input id="profile-display-name-input" maxlength="24" placeholder="How people see you" />
+      </label>
+      <label class="field">
+        <span>Status message</span>
+        <input id="profile-status-message-input" maxlength="80" placeholder="What people should know about you" />
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select id="presence-status-select">
+          <option value="online">Online</option>
+          <option value="busy">Busy</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Font</span>
+        <select id="font-select">
+          <option value="Space Grotesk">Space Grotesk</option>
+          <option value="DM Sans">DM Sans</option>
+          <option value="Manrope">Manrope</option>
+          <option value="IBM Plex Sans">IBM Plex Sans</option>
+          <option value="Outfit">Outfit</option>
+          <option value="Sora">Sora</option>
+          <option value="Nunito">Nunito</option>
+          <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
+          <option value="Bricolage Grotesque">Bricolage Grotesque</option>
+          <option value="Figtree">Figtree</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Text color</span>
+        <input id="accent-color-input" type="color" value="#edf4ff" />
+      </label>
+      <label class="field">
+        <span>Background</span>
+        <select id="background-style-select">
+          <option value="aurora">Aurora</option>
+          <option value="midnight">Midnight</option>
+          <option value="sunrise">Sunrise</option>
+        </select>
+      </label>
+      <label class="field checkbox-field">
+        <input id="allow-guest-camera-view" type="checkbox" checked />
+        <span>Allow guests to view my camera</span>
+      </label>
+      <label class="field checkbox-field">
+        <input id="allow-private-calls" type="checkbox" checked />
+        <span>Allow private voice and video calls</span>
+      </label>
+      <label class="field checkbox-field">
+        <input id="friends-only-private-messages" type="checkbox" />
+        <span>Only allow private messages from friends</span>
+      </label>
+      <label class="field checkbox-field">
+        <input id="friends-only-calls" type="checkbox" />
+        <span>Only allow private calls from friends</span>
+      </label>
+      <label class="field checkbox-field">
+        <input id="adult-confirmed-input" type="checkbox" />
+        <span>I confirm I am 18 or older for adult-only rooms</span>
+      </label>
+      <div class="field">
+        <span>Blocked users</span>
+        <div id="blocked-users-list" class="blocked-users-list"></div>
+      </div>
       <div class="account-menu-actions">
         <button id="claim-owner-btn" class="ghost-button hidden" type="button">Claim site owner</button>
         <button id="open-admin-console-btn" class="ghost-button hidden" type="button">Admin console</button>

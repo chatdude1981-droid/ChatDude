@@ -65,10 +65,6 @@
     pmWindowSize: { width: 420, height: 540 },
     resizingPmWindow: null,
     lastActivityPingAt: 0,
-    replyDraft: null,
-    composerTrayOpen: false,
-    sidebarSearch: "",
-    pmSearch: "",
     pmCall: {
       targetSocketId: "",
       targetUsername: "",
@@ -110,13 +106,11 @@
     heroCopyText: document.getElementById("hero-copy-text"),
     topbarBrand: document.getElementById("topbar-brand"),
     activeRoomPill: document.getElementById("active-room-pill"),
-    roomFeatureStrip: document.getElementById("room-feature-strip"),
     leaveRoomBtn: document.getElementById("leave-room-btn"),
     accountBadge: document.getElementById("account-badge"),
     openInboxBtn: document.getElementById("open-inbox-btn"),
     inboxCount: document.getElementById("inbox-count"),
     pmInboxPopover: document.getElementById("pm-inbox-popover"),
-    pmSearchInput: document.getElementById("pm-search-input"),
     presenceStatusSelect: document.getElementById("presence-status-select"),
     accountMenu: document.getElementById("account-menu"),
     accountMenuTitle: document.getElementById("account-menu-title"),
@@ -143,16 +137,9 @@
     messages: document.getElementById("messages"),
     messageForm: document.getElementById("message-form"),
     messageInput: document.getElementById("message-input"),
-    replyBanner: document.getElementById("reply-banner"),
-    replyBannerTitle: document.getElementById("reply-banner-title"),
-    replyBannerText: document.getElementById("reply-banner-text"),
-    clearReplyBtn: document.getElementById("clear-reply-btn"),
-    toggleComposerToolsBtn: document.getElementById("toggle-composer-tools-btn"),
-    composerActionTray: document.getElementById("composer-action-tray"),
     typingIndicator: document.getElementById("typing-indicator"),
     usersList: document.getElementById("users-list"),
     friendsList: document.getElementById("friends-list"),
-    sidebarSearchInput: document.getElementById("sidebar-search-input"),
     pmFeed: document.getElementById("pm-feed"),
     userMenu: document.getElementById("user-menu"),
     userMenuHeader: document.getElementById("user-menu-header"),
@@ -433,81 +420,6 @@
     input.select();
     document.execCommand("copy");
     input.remove();
-  }
-
-  function truncatePreviewText(value, maxLength) {
-    const text = String(value || "").replace(/\s+/g, " ").trim();
-    if (!text) {
-      return "";
-    }
-    if (text.length <= maxLength) {
-      return text;
-    }
-    return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-  }
-
-  function setReplyDraft(payload) {
-    state.replyDraft = payload ? {
-      username: payload.username || "",
-      label: payload.label || payload.username || "User",
-      snippet: truncatePreviewText(payload.snippet || "", 84)
-    } : null;
-    renderComposerState();
-  }
-
-  function insertIntoComposer(textToInsert) {
-    const input = elements.messageInput;
-    if (!input) {
-      return;
-    }
-
-    const currentValue = input.value || "";
-    const start = typeof input.selectionStart === "number" ? input.selectionStart : currentValue.length;
-    const end = typeof input.selectionEnd === "number" ? input.selectionEnd : currentValue.length;
-    input.value = `${currentValue.slice(0, start)}${textToInsert}${currentValue.slice(end)}`;
-    const cursor = start + textToInsert.length;
-    input.focus();
-    if (typeof input.setSelectionRange === "function") {
-      input.setSelectionRange(cursor, cursor);
-    }
-  }
-
-  function renderComposerState() {
-    const hasReply = Boolean(state.replyDraft);
-    elements.replyBanner.classList.toggle("hidden", !hasReply);
-    if (hasReply) {
-      elements.replyBannerTitle.textContent = state.replyDraft.label;
-      elements.replyBannerText.textContent = state.replyDraft.snippet || "Reply context will be sent inline.";
-    }
-
-    elements.composerActionTray.classList.toggle("hidden", !state.composerTrayOpen);
-    elements.toggleComposerToolsBtn.setAttribute("aria-expanded", state.composerTrayOpen ? "true" : "false");
-    elements.toggleComposerToolsBtn.textContent = state.composerTrayOpen ? "−" : "+";
-  }
-
-  function renderRoomFeatures() {
-    if (!elements.roomFeatureStrip) {
-      return;
-    }
-
-    const activeRoom = roomBySlug(state.activeRoom);
-    const badges = [];
-
-    if (activeRoom) {
-      badges.push(activeRoom.adultOnly ? "18+ room" : "open room");
-      badges.push(activeRoom.system ? "official" : "custom");
-    }
-
-    badges.push("images");
-    badges.push("YouTube");
-    badges.push("PMs");
-    badges.push("cams");
-
-    elements.roomFeatureStrip.innerHTML = badges
-      .map(function (badge) {
-        return `<span class="room-feature-badge">${escapeHtml(badge)}</span>`;
-      })
-      .join("");
   }
 
   function setConnectionState(nextState, detail) {
@@ -959,26 +871,12 @@
     }
 
     const friends = friendUsernames();
-    const search = state.sidebarSearch.trim().toLowerCase();
     if (!friends.length) {
       elements.friendsList.innerHTML = '<li class="empty-state">No friends yet. Use a user menu to add one.</li>';
       return;
     }
 
     friends
-      .filter(function (username) {
-        if (!search) {
-          return true;
-        }
-        const onlineFriend = state.users.find(function (user) {
-          return user.username === username;
-        });
-        return [username, onlineFriend?.displayName, onlineFriend?.preferences?.statusMessage]
-          .filter(Boolean)
-          .some(function (value) {
-            return String(value).toLowerCase().includes(search);
-          });
-      })
       .slice()
       .sort(function (left, right) {
         return left.localeCompare(right);
@@ -1046,10 +944,6 @@
         `;
         elements.friendsList.appendChild(item);
       });
-
-    if (!elements.friendsList.children.length) {
-      elements.friendsList.innerHTML = '<li class="empty-state">No friends match that filter.</li>';
-    }
   }
 
   async function removeFriendByUsername(username) {
@@ -1132,23 +1026,8 @@
   function renderRooms() {
     elements.roomList.innerHTML = "";
     elements.roomPickerList.innerHTML = "";
-    const search = state.sidebarSearch.trim().toLowerCase();
-    const visibleRooms = state.rooms.filter(function (room) {
-      if (!search) {
-        return true;
-      }
-      return [room.name, room.description, room.topic, room.slug]
-        .filter(Boolean)
-        .some(function (value) {
-          return String(value).toLowerCase().includes(search);
-        });
-    });
 
-    if (!visibleRooms.length) {
-      elements.roomList.innerHTML = '<div class="empty-state">No rooms match that filter.</div>';
-    }
-
-    visibleRooms.forEach(function (room) {
+    state.rooms.forEach(function (room) {
       const roomButton = document.createElement("button");
       roomButton.type = "button";
       roomButton.className = `room-item${room.slug === state.activeRoom ? " is-active" : ""}`;
@@ -1184,7 +1063,6 @@
     } else {
       elements.activeRoomPill.textContent = "Choose a room";
     }
-    renderRoomFeatures();
     elements.leaveRoomBtn.classList.toggle("hidden", !isInActiveRoom());
     elements.accountLeaveRoomBtn.classList.toggle("hidden", !isInActiveRoom());
 
@@ -1448,6 +1326,7 @@
 
     state.messages.forEach(function (message) {
       const item = document.createElement("li");
+      item.className = `message-item ${message.kind}`;
       const isOwnMessage = Boolean(
         state.me &&
         message.kind !== "system" &&
@@ -1456,7 +1335,6 @@
           (message.username && state.me.username && message.username === state.me.username)
         )
       );
-      item.className = `message-item ${message.kind}${isOwnMessage ? " is-own-message" : ""}`;
 
       if (message.kind === "system") {
         const body = document.createElement("div");
@@ -1529,15 +1407,6 @@
           body.appendChild(content.querySelector(".message-embed-stack"));
         }
 
-        const replyButton = document.createElement("button");
-        replyButton.type = "button";
-        replyButton.className = "message-reply-btn ghost-button";
-        replyButton.dataset.replyUsername = message.username || "";
-        replyButton.dataset.replyLabel = message.displayName || message.username || "User";
-        replyButton.dataset.replySnippet = truncatePreviewText(message.message || "", 84);
-        replyButton.textContent = "Reply";
-        body.appendChild(replyButton);
-
         item.appendChild(body);
         elements.messages.appendChild(item);
       }
@@ -1549,25 +1418,10 @@
   function renderUsers() {
     elements.usersList.innerHTML = "";
 
-    const search = state.sidebarSearch.trim().toLowerCase();
-    const everyone = state.users.filter(function (user) {
-      if (!search) {
-        return true;
-      }
-      return [
-        user.displayName,
-        user.username,
-        user.preferences?.statusMessage,
-        user.effectivePresenceStatus
-      ]
-        .filter(Boolean)
-        .some(function (value) {
-          return String(value).toLowerCase().includes(search);
-        });
-    });
+    const everyone = state.users.slice();
 
     if (!everyone.length) {
-      elements.usersList.innerHTML = `<li class="empty-state">${search ? "No users match that filter." : "Nobody is here yet."}</li>`;
+      elements.usersList.innerHTML = '<li class="empty-state">Nobody is here yet.</li>';
       return;
     }
 
@@ -1769,19 +1623,9 @@
     elements.pmFeed.innerHTML = "";
     updateInboxCount();
 
-    const search = state.pmSearch.trim().toLowerCase();
-    const conversations = buildPmConversations().filter(function (conversation) {
-      if (!search) {
-        return true;
-      }
-      return [conversation.username, conversation.label, conversation.message]
-        .filter(Boolean)
-        .some(function (value) {
-          return String(value).toLowerCase().includes(search);
-        });
-    });
+    const conversations = buildPmConversations();
     if (!conversations.length) {
-      elements.pmFeed.innerHTML = `<li class="empty-state">${search ? "No conversations match that search." : "Your private conversations will show up here."}</li>`;
+      elements.pmFeed.innerHTML = '<li class="empty-state">Your private conversations will show up here.</li>';
       return;
     }
 
@@ -1789,17 +1633,14 @@
       const item = document.createElement("li");
       item.className = "pm-entry";
       item.innerHTML = `
-        <div class="pm-entry-row">
-          <button type="button" class="pm-entry-button" data-open-pm-user="${escapeHtml(conversation.username)}">
-            <div class="pm-entry-header">
-              <strong style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.label)}</strong>
-              <span class="pm-meta">${escapeHtml(formatTime(conversation))}</span>
-            </div>
-            <div class="message-text" style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.message)}</div>
-            ${conversation.unread ? `<span class="pm-unread-badge">${escapeHtml(conversation.unread)}</span>` : ""}
-          </button>
-          <button type="button" class="pm-entry-dismiss ghost-button" data-dismiss-pm-user="${escapeHtml(conversation.username)}" aria-label="Remove conversation" title="Remove conversation">×</button>
-        </div>
+        <button type="button" class="pm-entry-button" data-open-pm-user="${escapeHtml(conversation.username)}">
+          <div class="pm-entry-header">
+            <strong style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.label)}</strong>
+            <span class="pm-meta">${escapeHtml(formatTime(conversation))}</span>
+          </div>
+          <div class="message-text" style="${escapeHtml(styleFromPreferences(conversation.preferences))}">${escapeHtml(conversation.message)}</div>
+          ${conversation.unread ? `<span class="pm-unread-badge">${escapeHtml(conversation.unread)}</span>` : ""}
+        </button>
       `;
       elements.pmFeed.appendChild(item);
     });
@@ -2312,23 +2153,6 @@
     elements.openInboxBtn.setAttribute("aria-expanded", "false");
   }
 
-  function dismissPmConversation(username) {
-    if (!username) {
-      return;
-    }
-
-    state.pmFeed = state.pmFeed.filter(function (entry) {
-      return getConversationUsername(entry) !== username;
-    });
-    delete state.pmUnread[username];
-    if (state.activePmUser?.username === username) {
-      state.activePmUser = null;
-    }
-    savePmFeed();
-    renderPmInbox();
-    renderPmWindow();
-  }
-
   function openPmConversation(userLike) {
     if (!userLike || !userLike.username) {
       return;
@@ -2673,7 +2497,6 @@
         state.mediaPublishers = [];
         state.openMediaIds.clear();
         state.typingUsers = [];
-        setReplyDraft(null);
         renderMessages();
         renderUsers();
         renderCallPanel();
@@ -3270,19 +3093,11 @@
     event.preventDefault();
     if (!state.socket) return;
 
-    let message = elements.messageInput.value.trim();
+    const message = elements.messageInput.value.trim();
     if (!message) return;
-
-    if (state.replyDraft?.username) {
-      const mention = `@${state.replyDraft.username}`;
-      if (!message.startsWith(mention)) {
-        message = `${mention} ${message}`;
-      }
-    }
 
     state.socket.emit("chat message", { message });
     elements.messageInput.value = "";
-    setReplyDraft(null);
     stopTyping();
     elements.messageInput.focus();
   }
@@ -3734,36 +3549,6 @@
     elements.messageInput.addEventListener("input", function () {
       sendActivityPing(false);
     });
-    elements.clearReplyBtn.addEventListener("click", function () {
-      setReplyDraft(null);
-      elements.messageInput.focus();
-    });
-    elements.toggleComposerToolsBtn.addEventListener("click", function () {
-      state.composerTrayOpen = !state.composerTrayOpen;
-      renderComposerState();
-    });
-    elements.messageForm.addEventListener("click", async function (event) {
-      const insertButton = event.target.closest("[data-insert-message]");
-      if (insertButton) {
-        insertIntoComposer(insertButton.dataset.insertMessage || "");
-        sendActivityPing(false);
-        return;
-      }
-
-      const actionButton = event.target.closest("[data-composer-action]");
-      if (!actionButton) {
-        return;
-      }
-
-      if (actionButton.dataset.composerAction === "copy-room-link") {
-        try {
-          await copyText(getActiveRoomLink());
-          showToast("Room link copied.", "success");
-        } catch (_error) {
-          showToast("Unable to copy the room link on this device.", "error");
-        }
-      }
-    });
     elements.callParticipants.addEventListener("pointerdown", handleCallPointerDown);
     elements.callParticipants.addEventListener("pointerdown", function (event) {
       if (event.target.closest("[data-close-local-camera='true'], [data-close-remote-camera], [data-call-fullscreen], [data-toggle-mic='true'], [data-toggle-camera='true'], [data-toggle-remote-mute], [data-remote-volume]")) {
@@ -3850,15 +3635,6 @@
       event.stopPropagation();
       openPmInbox();
     });
-    elements.sidebarSearchInput.addEventListener("input", function () {
-      state.sidebarSearch = elements.sidebarSearchInput.value || "";
-      renderUsers();
-      renderRooms();
-    });
-    elements.pmSearchInput.addEventListener("input", function () {
-      state.pmSearch = elements.pmSearchInput.value || "";
-      renderPmInbox();
-    });
     elements.joinAudioBtn.addEventListener("click", function () {
       if (state.isPublishing) {
         leaveCall();
@@ -3900,14 +3676,6 @@
       }
     });
     elements.pmFeed.addEventListener("click", function (event) {
-      const dismissButton = event.target.closest("[data-dismiss-pm-user]");
-      if (dismissButton) {
-        event.preventDefault();
-        event.stopPropagation();
-        dismissPmConversation(dismissButton.dataset.dismissPmUser);
-        return;
-      }
-
       const button = event.target.closest("[data-open-pm-user]");
       if (!button) {
         return;
@@ -3946,21 +3714,6 @@
     }
 
     elements.messages.addEventListener("click", userTriggerHandler);
-    elements.messages.addEventListener("click", function (event) {
-      const replyButton = event.target.closest("[data-reply-username]");
-      if (!replyButton) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      setReplyDraft({
-        username: replyButton.dataset.replyUsername,
-        label: replyButton.dataset.replyLabel,
-        snippet: replyButton.dataset.replySnippet
-      });
-      elements.messageInput.focus();
-    });
     elements.usersList.addEventListener("click", userTriggerHandler);
     elements.friendsList.addEventListener("click", userTriggerHandler);
     elements.friendsList.addEventListener("click", function (event) {
@@ -3986,8 +3739,6 @@
         return;
       }
       closePmInbox();
-      state.composerTrayOpen = false;
-      renderComposerState();
       sendActivityPing(false);
     });
 
@@ -3998,8 +3749,6 @@
         closeAccountMenu();
         closePmInbox();
         closePmWindow();
-        state.composerTrayOpen = false;
-        setReplyDraft(null);
         closeModal(elements.roomModalOverlay);
       }
     });
@@ -4151,6 +3900,5 @@
   }
 
   bindEvents();
-  renderComposerState();
   bootstrap();
 })();
